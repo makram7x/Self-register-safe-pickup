@@ -1,0 +1,1 @@
+# Self-register-safe-pickup
