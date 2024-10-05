@@ -14,8 +14,8 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body key="1" className="grid min-h-screen w-full grid-cols-[280px_1fr]">
-        <Nav />  
-        <main >
+        <Nav />
+        <main>
           <SearchBar />
           {children} {/* This is where the content of each page will go */}
         </main>
