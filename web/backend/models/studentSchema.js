@@ -8,6 +8,23 @@ const studentSchema = new mongoose.Schema({
   parentName: {
     type: String,
     required: true
+  },
+  grade: {
+    type: String,
+    required: true
+  },
+  parentPhone: {
+    type: String,
+    required: true
+  },
+  parentEmail: {
+    type: String,
+    required: true
+  },
+  uniqueCode: {
+    type: String,
+    required: true,
+    unique: true
   }
 });
 

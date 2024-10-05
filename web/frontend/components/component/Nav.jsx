@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { CardTitle, CardDescription, CardHeader, CardContent, Card } from "@/components/ui/card"
+// import Link from "next/navigation"
 
 function Nav() {
   return (
@@ -18,32 +19,40 @@ function Nav() {
             </Button>
           </div>
           <div className="flex-1 py-2">
-            <nav className="grid items-start px-4 text-sm font-medium">
+            <ul className="grid items-start px-4 text-sm font-medium">
+              <li> 
               <Link
                 className="flex items-center gap-3 rounded-lg bg-gray-100 px-3 py-2 text-gray-900 transition-all hover:text-gray-900 dark:bg-gray-800 dark:text-gray-50 dark:hover:text-gray-50"
                 href="/">
                 <LayoutDashboardIcon className="h-4 w-4" />
                 Dashboard
-              </Link>
+                </Link>
+              </li>
+              <li> 
               <Link
                 className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-500 transition-all hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-50"
-                href="/student/page">
+                href="/student">
                 <UsersIcon className="h-4 w-4" />
                 Students
-              </Link>
+                </Link>
+              </li>
+              <li> 
               <Link
                 className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-500 transition-all hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-50"
-                href="./pickup">
+                href="/pickup">
                 <CarIcon className="h-4 w-4" />
                 Pick-up
               </Link>
+              </li>
+              <li> 
               <Link
                 className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-500 transition-all hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-50"
-                href="/component/Notifications">
+                href="/notifications">
                 <MegaphoneIcon className="h-4 w-4" />
                 Announcements
               </Link>
-            </nav>
+              </li>
+            </ul>
           </div>
           <div className="mt-80 p-4">
             <Card>
