@@ -15,7 +15,8 @@ export default function HomeScreen() {
   const [userInfo, setUserInfo] = React.useState(null);
   const [request, response, promptAsync] = Google.useAuthRequest({
     // androidClientId: "YOUR_ANDROID_CLIENT_ID",
-    // iosClientId: "YOUR_IOS_CLIENT_ID",
+    iosClientId:
+      "816180050501-764k6sgilf093gdgg80ph091es9s4im1.apps.googleusercontent.com",
     webClientId:
       "816180050501-lp47c8kgbmb0tlteipan045cracnm4u6.apps.googleusercontent.com",
     scopes: ["profile", "email"],

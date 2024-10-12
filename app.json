@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "2a895faf-8ec4-4b5d-ac37-c9547a77b7e9"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.makram7x.selfregistersafepickup"
+    },
+    "scheme": "selfregistersafepickup"
+  }
+}
