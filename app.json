@@ -6,7 +6,10 @@
       }
     },
     "ios": {
-      "bundleIdentifier": "com.makram7x.selfregistersafepickup"
+      "bundleIdentifier": "com.makram7x.selfregistersafepickup",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to scan QR codes."
+      }
     },
     "scheme": "selfregistersafepickup"
   }
