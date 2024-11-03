@@ -121,6 +121,25 @@ const getUniqueParentsCount = async (req, res) => {
   }
 };
 
+const getStudentByUniqueCode = async (req, res) => {
+  try {
+    const { uniqueCode } = req.params;
+    const student = await Student.findOne({ uniqueCode });
+
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    res.status(200).json({
+      studentName: student.studentName,
+      uniqueCode: student.uniqueCode,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 module.exports = {
   createStudent,
   getAllStudents,
@@ -128,4 +147,5 @@ module.exports = {
   updateStudent,
   getAllStudentsCount,
   getUniqueParentsCount,
+  getStudentByUniqueCode,
 };

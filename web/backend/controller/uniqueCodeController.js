@@ -1,8 +1,8 @@
-const Student = require('../models/studentSchema');
+const Student = require("../models/studentSchema");
 
 const generateUniqueCode = () => {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let uniqueCode = '';
+  const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let uniqueCode = "";
   for (let i = 0; i < 6; i++) {
     const randomIndex = Math.floor(Math.random() * characters.length);
     uniqueCode += characters[randomIndex];
@@ -13,24 +13,37 @@ const generateUniqueCode = () => {
 const generateUniqueCodes = async (req, res) => {
   try {
     const students = await Student.find();
+
+    if (!students || students.length === 0) {
+      return res.status(404).json({ message: "No students found" });
+    }
+
+    const updatedStudents = [];
+
     for (const student of students) {
-      const uniqueCode = generateUniqueCode();
-      await Student.findByIdAndUpdate(
+      let newCode = generateUniqueCode();
+      const updatedStudent = await Student.findByIdAndUpdate(
         student._id,
-        { uniqueCode },
+        { uniqueCode: newCode },
         { new: true }
       );
+      if (updatedStudent) {
+        updatedStudents.push(updatedStudent);
+      }
     }
-    res.json({ message: 'Unique codes generated successfully' });
+
+    // Return the actual updated students array instead of just a message
+    return res.status(200).json(updatedStudents);
   } catch (error) {
-    console.error('Error generating unique codes:', error);
-    res.status(500).json({ error: 'An error occurred while generating unique codes' });
+    console.error("Error generating unique codes:", error);
+    return res.status(500).json({
+      error: "An error occurred while generating unique codes",
+      details: error.message,
+    });
   }
 };
 
 module.exports = { generateUniqueCodes };
-
-
 
 // const updateStudentUniqueCode = async (req, res) => {
 //   try {
