@@ -140,6 +140,19 @@ const getStudentByUniqueCode = async (req, res) => {
   }
 };
 
+const deleteAllStudents = async (req, res) => {
+  try {
+    const result = await Student.deleteMany({});
+    res.status(200).json({
+      message: "All students deleted successfully",
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 module.exports = {
   createStudent,
   getAllStudents,
@@ -148,4 +161,5 @@ module.exports = {
   getAllStudentsCount,
   getUniqueParentsCount,
   getStudentByUniqueCode,
+  deleteAllStudents,
 };

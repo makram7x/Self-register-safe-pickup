@@ -1,87 +1,169 @@
 // AnnouncementModal.js
+// AnnouncementModal.js
+"use client";
 import { useState } from "react";
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem } from "@mui/material";
-import { CalendarCheckIcon, CircleAlertIcon, MegaphoneIcon } from "../../public/icons/icons"; // Assuming you have these in an Icons.js file
+import { Modal, Input, Select, Form, Button } from "antd";
+import {
+  CalendarCheckIcon,
+  CircleAlertIcon,
+  MegaphoneIcon,
+} from "../../public/icons/icons";
+
+const { TextArea } = Input;
 
 export default function AnnouncementModal({ open, onClose, onSubmit }) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [icon, setIcon] = useState("");
+  const [form] = Form.useForm();
 
   const handleSubmit = () => {
-    onSubmit({ title, description, icon });
-    onClose();
-    // Reset form fields
-    setTitle("");
-    setDescription("");
-    setIcon("");
+    form.validateFields().then((values) => {
+      onSubmit(values);
+      form.resetFields();
+      onClose();
+    });
   };
 
   const iconOptions = [
-    { value: "calendar", label: "Calendar", component: CalendarCheckIcon },
-    { value: "alert", label: "Alert", component: CircleAlertIcon },
-    { value: "megaphone", label: "Megaphone", component: MegaphoneIcon },
+    {
+      value: "calendar",
+      label: (
+        <div className="flex items-center gap-2">
+          <CalendarCheckIcon className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+          <span className="dark:text-white">Calendar</span>
+        </div>
+      ),
+    },
+    {
+      value: "alert",
+      label: (
+        <div className="flex items-center gap-2">
+          <CircleAlertIcon className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+          <span className="dark:text-white">Alert</span>
+        </div>
+      ),
+    },
+    {
+      value: "megaphone",
+      label: (
+        <div className="flex items-center gap-2">
+          <MegaphoneIcon className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+          <span className="dark:text-white">Megaphone</span>
+        </div>
+      ),
+    },
   ];
 
   return (
-    <Dialog open={open} onClose={onClose}>
-      <DialogTitle>Create New Announcement</DialogTitle>
-      <DialogContent>
-        <TextField
-          label="Title"
-          fullWidth
-          margin="normal"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <TextField
-          label="Description"
-          fullWidth
-          multiline
-          rows={4}
-          margin="normal"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <Select
-          label="Icon"
-          fullWidth
-          margin="normal"
-          value={icon}
-          onChange={(e) => setIcon(e.target.value)}
-          displayEmpty
-          renderValue={(selected) => {
-            if (!selected) {
-              return <em>Select an icon</em>;
-            }
-            const selectedIcon = iconOptions.find((option) => option.value === selected);
-            return (
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                {selectedIcon.component({ style: { marginRight: 8 } })}
-                {selectedIcon.label}
-              </div>
-            );
-          }}
+    <Modal
+      title={
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          Create New Announcement
+        </h3>
+      }
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      styles={{
+        mask: {
+          backgroundColor: "rgba(0, 0, 0, 0.5)",
+        },
+        wrapper: {
+          backgroundColor: "var(--tw-bg-gray-800)",
+        },
+        header: {
+          backgroundColor: "rgb(31 41 55)", // matches dark:bg-gray-800
+          borderBottom: "1px solid rgb(55 65 81)", // matches dark:border-gray-700
+        },
+        content: {
+          backgroundColor: "rgb(31 41 55)", // matches dark:bg-gray-800
+        },
+        body: {
+          backgroundColor: "rgb(31 41 55)", // matches dark:bg-gray-800
+        },
+      }}
+    >
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg">
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleSubmit}
+          className="space-y-4"
         >
-          <MenuItem value="" disabled>
-            <em>Select an icon</em>
-          </MenuItem>
-          {iconOptions.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                {option.component({ style: { marginRight: 8 } })}
-                {option.label}
-              </div>
-            </MenuItem>
-          ))}
-        </Select>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSubmit} color="primary" disabled={!title || !description || !icon}>
-          Create
-        </Button>
-      </DialogActions>
-    </Dialog>
+          <Form.Item
+            name="title"
+            label={
+              <span className="text-gray-700 dark:text-gray-300">Title</span>
+            }
+            rules={[
+              {
+                required: true,
+                message: "Please enter a title",
+              },
+            ]}
+          >
+            <Input
+              placeholder="Enter announcement title"
+              className="dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="description"
+            label={
+              <span className="text-gray-700 dark:text-gray-300">
+                Description
+              </span>
+            }
+            rules={[
+              {
+                required: true,
+                message: "Please enter a description",
+              },
+            ]}
+          >
+            <TextArea
+              rows={4}
+              placeholder="Enter announcement description"
+              className="dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="icon"
+            label={
+              <span className="text-gray-700 dark:text-gray-300">Icon</span>
+            }
+            rules={[
+              {
+                required: true,
+                message: "Please select an icon",
+              },
+            ]}
+          >
+            <Select
+              placeholder="Select an icon"
+              options={iconOptions}
+              className="dark:bg-gray-700 dark:border-gray-600"
+              popupClassName="dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+          </Form.Item>
+
+          <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <Button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="primary"
+              onClick={handleSubmit}
+              className="px-4 py-2 bg-black text-white hover:bg-gray-900 transition-colors"
+            >
+              Create
+            </Button>
+          </div>
+        </Form>
+      </div>
+    </Modal>
   );
 }

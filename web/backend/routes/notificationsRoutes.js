@@ -36,4 +36,17 @@ router.post('/', async (req, res) => {
   }
 });
 
+router.delete("/bulk", async (req, res) => {
+  try {
+    const { ids } = req.body;
+    const result = await Notifications.deleteMany({ _id: { $in: ids } });
+    res.json({
+      message: "Notifications deleted successfully",
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error("Error deleting notifications:", error);
+    res.status(500).json({ error: "An error occurred" });
+  }
+});
 module.exports = router;

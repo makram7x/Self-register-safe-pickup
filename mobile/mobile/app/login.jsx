@@ -50,7 +50,7 @@ const AuthForms = () => {
       setIsLoading(false);
       return;
     }
-
+ 
     try {
       // In your AuthForms component:
       const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register";
@@ -60,7 +60,7 @@ const AuthForms = () => {
         ...(!isLogin && formData.name && { name: formData.name }),
       };
 
-      const response = await fetch(`http://localhost:5000${endpoint}`, {
+      const response = await fetch(`http://192.168.100.3:5000${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -231,7 +231,7 @@ export default function LoginScreen() {
         profilePicture: googleUser.picture,
       };
 
-      const serverResponse = await fetch("http://localhost:5000/api/users", {
+      const serverResponse = await fetch("http://192.168.100.3:5000/api/users", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

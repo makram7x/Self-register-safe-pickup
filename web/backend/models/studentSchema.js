@@ -3,29 +3,29 @@ const mongoose = require('mongoose');
 const studentSchema = new mongoose.Schema({
   studentName: {
     type: String,
-    required: true
+    required: true,
   },
   parentName: {
     type: String,
-    required: true
+    required: true,
   },
   grade: {
     type: String,
-    required: true
+    required: true,
   },
   parentPhone: {
     type: String,
-    required: true
+    required: true,
   },
   parentEmail: {
     type: String,
-    required: true
+    required: true,
   },
   uniqueCode: {
     type: String,
-    required: true,
-    unique: true
-  }
+    sparse: true, // This allows multiple documents with no uniqueCode
+    unique: true, // This ensures uniqueCode is unique when it exists
+  },
 });
 
 const Student = mongoose.model('Student', studentSchema);

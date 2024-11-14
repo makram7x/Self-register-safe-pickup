@@ -50,6 +50,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import * as XLSX from "xlsx";
 import { ChevronDownIcon, SearchIcon } from "lucide-react";
+import FileUploadErrorModal from "@/components/component/fileUploadErrorModal";
 
 export default function StudentPage() {
   const [isOpen, setIsOpen] = useState(false);
@@ -71,6 +72,10 @@ export default function StudentPage() {
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
   const [newlyGeneratedCodes, setNewlyGeneratedCodes] = useState([]);
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+  const [uploadErrors, setUploadErrors] = useState([]);
+  const [showErrorModal, setShowErrorModal] = useState(false);
 
   const openModal = () => {
     setIsOpen(true);
@@ -100,6 +105,39 @@ export default function StudentPage() {
   useEffect(() => {
     fetchStudents();
   }, []);
+
+  const handleDeleteAllStudents = async () => {
+    setIsDeletingAll(true);
+    try {
+      const response = await axios.delete(
+        "http://localhost:5000/api/students/delete-all"
+      );
+      if (response.status === 200) {
+        console.log("All students deleted successfully");
+        // Optional: Show how many students were deleted
+        const deletedCount = response.data.deletedCount;
+        alert(
+          `Successfully deleted ${deletedCount} student${
+            deletedCount !== 1 ? "s" : ""
+          }`
+        );
+        await fetchStudents();
+        setShowDeleteAllModal(false);
+      } else {
+        console.error("Failed to delete all students");
+        alert("Failed to delete all students. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error deleting all students:", error);
+      alert(
+        `Error deleting all students: ${
+          error.response?.data?.message || "Please try again."
+        }`
+      );
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -177,41 +215,98 @@ export default function StudentPage() {
   };
 
   const handleFileChange = (event) => {
-    setSelectedFile(event.target.files[0]);
+    const file = event.target.files[0];
+    if (file) {
+      const fileExt = file.name.split(".").pop().toLowerCase();
+      if (!["xlsx", "csv"].includes(fileExt)) {
+        setUploadErrors(["Only .xlsx and .csv files are supported"]);
+        setShowErrorModal(true);
+        event.target.value = ""; // Clear the file input
+        return;
+      }
+      setSelectedFile(file);
+      setUploadErrors([]);
+    }
   };
 
   const handleUpload = () => {
     if (selectedFile) {
       const reader = new FileReader();
-      reader.onload = (e) => {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: "array" });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      reader.onload = async (e) => {
+        try {
+          let jsonData;
+          const fileExt = selectedFile.name.split(".").pop().toLowerCase();
 
-        // Send the parsed data to the server
-        fetch("http://localhost:5000/api/upload", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(jsonData),
-        })
-          .then((response) => response.json())
-          .then((data) => {
-            console.log("Upload successful:", data);
-            // Reset the selected file after upload
-            setSelectedFile(null);
-            // Refresh the page
-            window.location.reload();
-          })
-          .catch((error) => {
-            console.error("Upload error:", error);
+          if (fileExt === "xlsx") {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: "array" });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          } else if (fileExt === "csv") {
+            const text = e.target.result;
+            const rows = text
+              .split("\n")
+              .map((row) => row.split(",").map((cell) => cell.trim()));
+            jsonData = rows;
+          }
+
+          const response = await fetch("http://localhost:5000/api/upload", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(jsonData),
           });
+
+          const result = await response.json();
+
+          // Always close the upload modal first
+          setIsModalOpen(false);
+          setSelectedFile(null);
+
+          if (response.ok && result.errors.length === 0) {
+            // If successful, show the announcement modal
+            setNewlyGeneratedCodes(result.successfulStudents);
+            setShowAnnouncementModal(true);
+            await fetchStudents();
+          } else {
+            // If there are errors, show the error modal
+            setUploadErrors(result.errors);
+            setShowErrorModal(true);
+          }
+        } catch (error) {
+          console.error("Upload error:", error);
+          // Close the upload modal first
+          setIsModalOpen(false);
+          setSelectedFile(null);
+          // Then show the error modal
+          setUploadErrors([error.message || "Error processing file"]);
+          setShowErrorModal(true);
+        }
       };
-      reader.readAsArrayBuffer(selectedFile);
+
+      if (selectedFile.name.endsWith(".csv")) {
+        reader.readAsText(selectedFile);
+      } else {
+        reader.readAsArrayBuffer(selectedFile);
+      }
     }
+  };
+
+  // Modify the existing modal content to handle both cases
+  const getModalTitle = () => {
+    if (newlyGeneratedCodes[0]?.hasOwnProperty("uniqueCode")) {
+      return "CSV Upload Results";
+    }
+    return "New Codes Generated";
+  };
+
+  const getModalMessage = () => {
+    if (newlyGeneratedCodes[0]?.hasOwnProperty("uniqueCode")) {
+      return "The following students have been added successfully:";
+    }
+    return "New unique codes have been generated for all students. Do you want to send an announcement to parents?";
   };
 
   const onModal = () => {
@@ -231,21 +326,28 @@ export default function StudentPage() {
       );
       console.log("Generate codes response:", response.data);
 
-      if (Array.isArray(response.data)) {
-        // If we get an array of updated students
-        setNewlyGeneratedCodes(response.data);
-        setShowAnnouncementModal(true);
-      } else if (response.data.message) {
-        // If we get a success message, fetch the updated students
-        const studentsResponse = await axios.get(
-          "http://localhost:5000/api/students"
-        );
-        setNewlyGeneratedCodes(studentsResponse.data);
-        setShowAnnouncementModal(true);
-      }
+      if (response.data.success) {
+        if (response.data.updatedStudents?.length > 0) {
+          setNewlyGeneratedCodes(response.data.updatedStudents);
+          setShowAnnouncementModal(true);
 
-      // Refresh the main students list regardless of response type
-      fetchStudents();
+          // Show warning if there were any errors
+          if (response.data.errors?.length > 0) {
+            console.warn(
+              "Some errors occurred during generation:",
+              response.data.errors
+            );
+            alert(`Warning: ${response.data.message}`);
+          }
+        } else {
+          alert("No codes were generated. Please try again.");
+        }
+
+        // Refresh the main students list
+        await fetchStudents();
+      } else {
+        throw new Error(response.data.message || "Failed to generate codes");
+      }
     } catch (error) {
       console.error("Error generating unique codes:", error);
       alert(
@@ -308,9 +410,9 @@ export default function StudentPage() {
   }, [students]);
 
   return (
-    <div>
-      <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
-        <Card className="w-full">
+    <div className="h-screen flex flex-col">
+      <main className="flex flex-1 flex-col p-4 md:p-6 overflow-hidden">
+        <Card className="flex-1 flex flex-col">
           <CardHeader className="flex flex-col items-center justify-between pb-2 space-y-4 md:flex-row md:space-y-0">
             <CardTitle className="text-sm font-medium">Students</CardTitle>
             <div className="flex items-center space-x-4">
@@ -427,24 +529,43 @@ export default function StudentPage() {
                     <div className="relative bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-xl transform transition-all sm:max-w-lg sm:w-full">
                       <div className="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                         <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-                          New Codes Generated
+                          {getModalTitle()}
                         </h2>
                         <p className="mb-4 text-gray-700 dark:text-gray-300">
-                          New unique codes have been generated for all students.
-                          Do you want to send an announcement to parents?
+                          {getModalMessage()}
                         </p>
                         <div className="max-h-64 overflow-y-auto">
                           {newlyGeneratedCodes.length > 0 ? (
-                            <ul className="list-disc pl-5 text-gray-700 dark:text-gray-300">
-                              {newlyGeneratedCodes.map((student) => (
-                                <li key={student._id} className="py-1">
-                                  <span className="font-medium">
-                                    {student.studentName}
-                                  </span>
-                                  : {student.uniqueCode}
-                                </li>
-                              ))}
-                            </ul>
+                            <>
+                              <ul className="list-disc pl-5 text-gray-700 dark:text-gray-300">
+                                {newlyGeneratedCodes.map((student, index) => (
+                                  <li key={index} className="py-1">
+                                    <span className="font-medium">
+                                      {student.studentName}
+                                    </span>
+                                    : {student.uniqueCode}
+                                  </li>
+                                ))}
+                              </ul>
+                              {/* Keep the error display section */}
+                              {newlyGeneratedCodes.errors &&
+                                newlyGeneratedCodes.errors.length > 0 && (
+                                  <div className="mt-4 p-3 bg-yellow-100 dark:bg-yellow-900 rounded-md">
+                                    <h3 className="text-yellow-800 dark:text-yellow-200 font-medium mb-2">
+                                      Warnings:
+                                    </h3>
+                                    <ul className="list-disc pl-5 text-yellow-700 dark:text-yellow-300">
+                                      {newlyGeneratedCodes.errors.map(
+                                        (error, index) => (
+                                          <li key={index} className="text-sm">
+                                            {error}
+                                          </li>
+                                        )
+                                      )}
+                                    </ul>
+                                  </div>
+                                )}
+                            </>
                           ) : (
                             <p className="text-gray-500 dark:text-gray-400">
                               No new codes generated
@@ -454,16 +575,81 @@ export default function StudentPage() {
                         <div className="flex justify-end mt-4">
                           <button
                             className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded mr-2 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                            onClick={() => setShowAnnouncementModal(false)}
+                            onClick={() => {
+                              setShowAnnouncementModal(false);
+                              setNewlyGeneratedCodes([]);
+                            }}
                           >
-                            Cancel
+                            Close
+                          </button>
+                          {!newlyGeneratedCodes[0]?.hasOwnProperty(
+                            "uniqueCode"
+                          ) && (
+                            <button
+                              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
+                              onClick={sendAnnouncement}
+                              disabled={newlyGeneratedCodes.length === 0}
+                            >
+                              Send Announcement
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <button
+                onClick={() => setShowDeleteAllModal(true)}
+                className="text-sm font-medium bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
+              >
+                Delete All Students
+              </button>
+              {/* Delete All Confirmation Modal */}
+              {showDeleteAllModal && (
+                <div className="fixed z-10 inset-0 overflow-y-auto">
+                  <div className="flex items-center justify-center min-h-screen">
+                    <div
+                      className="fixed inset-0 transition-opacity"
+                      onClick={() => setShowDeleteAllModal(false)}
+                    >
+                      <div className="absolute inset-0 bg-gray-500/75 dark:bg-gray-900/80"></div>
+                    </div>
+
+                    <div className="relative bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-xl transform transition-all sm:max-w-lg sm:w-full">
+                      <div className="px-4 pt-5 pb-4 sm:p-6">
+                        <div className="sm:flex sm:items-start">
+                          <div className="mt-3 text-center sm:mt-0 sm:text-left">
+                            <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100">
+                              Delete All Students
+                            </h3>
+                            <div className="mt-2">
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                Are you sure you want to delete all students?
+                                This action cannot be undone.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                          <button
+                            type="button"
+                            className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm ${
+                              isDeletingAll
+                                ? "opacity-50 cursor-not-allowed"
+                                : ""
+                            }`}
+                            onClick={handleDeleteAllStudents}
+                            disabled={isDeletingAll}
+                          >
+                            {isDeletingAll ? "Deleting..." : "Delete All"}
                           </button>
                           <button
-                            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
-                            onClick={sendAnnouncement}
-                            disabled={newlyGeneratedCodes.length === 0}
+                            type="button"
+                            className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600"
+                            onClick={() => setShowDeleteAllModal(false)}
                           >
-                            Send Announcement
+                            Cancel
                           </button>
                         </div>
                       </div>
@@ -477,6 +663,13 @@ export default function StudentPage() {
               >
                 Upload CSV
               </button>
+              {showErrorModal && (
+                <FileUploadErrorModal
+                  isOpen={showErrorModal}
+                  onClose={() => setShowErrorModal(false)}
+                  errors={uploadErrors}
+                />
+              )}
               {isModalOpen && (
                 <div className="fixed z-10 inset-0 overflow-y-auto">
                   <div className="flex items-center justify-center min-h-screen">
@@ -490,16 +683,16 @@ export default function StudentPage() {
                     <div className="bg-white rounded-lg overflow-hidden shadow-xl transform transition-all sm:max-w-lg sm:w-full">
                       <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                         <h2 className="text-xl font-semibold mb-4">
-                          Upload Excel File
+                          Upload Excel or CSV File
                         </h2>
                         <div className="mb-4">
                           <label htmlFor="file-upload" className="sr-only">
-                            Choose Excel file
+                            Choose file
                           </label>
                           <input
                             id="file-upload"
                             type="file"
-                            accept=".xlsx"
+                            accept=".xlsx,.csv"
                             onChange={handleFileChange}
                             className="hidden"
                           />
@@ -507,7 +700,7 @@ export default function StudentPage() {
                             htmlFor="file-upload"
                             className="py-2 px-4 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
                           >
-                            Choose Excel file
+                            Choose file
                           </label>
                           {selectedFile && (
                             <p className="mt-2 text-sm text-gray-500">
@@ -693,111 +886,131 @@ export default function StudentPage() {
             )}
           </CardHeader>
 
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Pickup Drivers</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredStudents.length > 0 ? (
-                  filteredStudents.map((student, index) => (
-                    <React.Fragment key={index}>
-                      <TableRow>
-                        <TableCell className="font-medium">
-                          {student.studentName}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Avatar>
-                              <AvatarImage
-                                alt="Jane Doe"
-                                src="/placeholder-user.jpg"
-                              />
-                              <AvatarFallback>JD</AvatarFallback>
-                            </Avatar>
-                            <span>{student.parentName}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            className="text-sm font-medium"
-                            onClick={() =>
-                              setSelectedStudent(
-                                selectedStudent === student ? null : student
-                              )
-                            }
-                          >
-                            {selectedStudent === student
-                              ? "Hide Details"
-                              : "Show Details"}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                      {selectedStudent === student && (
-                        <TableRow>
-                          <TableCell colSpan={3}>
-                            <div className="p-4 student-details">
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <p>
-                                    <strong>Student Name:</strong>{" "}
-                                    {student.studentName}
-                                  </p>
-                                  <p>
-                                    <strong>Parent Name:</strong>{" "}
-                                    {student.parentName}
-                                  </p>
-                                  <p>
-                                    <strong>Grade:</strong> {student.grade}
-                                  </p>
+          <CardContent className="mt-3">
+            <div className="border rounded-lg">
+              <div className="w-full">
+                <div className="border-b">
+                  <table className="w-full">
+                    <thead>
+                      <tr>
+                        <th className="text-left p-4 font-medium">Student</th>
+                        <th className="text-left p-4 font-medium">
+                          Pickup Drivers
+                        </th>
+                        <th className="w-32"></th>
+                      </tr>
+                    </thead>
+                  </table>
+                </div>
+
+                {/* Scrollable content area */}
+                <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
+                  <table className="w-full">
+                    <tbody>
+                      {filteredStudents.length > 0 ? (
+                        filteredStudents.map((student, index) => (
+                          <React.Fragment key={index}>
+                            <tr className="border-b">
+                              <td className="p-4 font-medium">
+                                {student.studentName}
+                              </td>
+                              <td className="p-4">
+                                <div className="flex items-center gap-2">
+                                  <Avatar>
+                                    <AvatarImage
+                                      alt="Jane Doe"
+                                      src="/placeholder-user.jpg"
+                                    />
+                                    <AvatarFallback>JD</AvatarFallback>
+                                  </Avatar>
+                                  <span>{student.parentName}</span>
                                 </div>
-                                <div>
-                                  <p>
-                                    <strong>Parent Phone:</strong>{" "}
-                                    {student.parentPhone}
-                                  </p>
-                                  <p>
-                                    <strong>Parent Email:</strong>{" "}
-                                    {student.parentEmail}
-                                  </p>
-                                  <p>
-                                    <strong>Unique Code:</strong>{" "}
-                                    {student.uniqueCode}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="mt-4 flex justify-end">
-                                <Button
-                                  className="text-sm font-medium mr-2"
-                                  onClick={() => handleEdit(student)}
-                                >
-                                  Edit
-                                </Button>
+                              </td>
+                              <td className="p-4 text-right">
                                 <Button
                                   className="text-sm font-medium"
-                                  onClick={() => handleDelete(student._id)}
+                                  onClick={() =>
+                                    setSelectedStudent(
+                                      selectedStudent === student
+                                        ? null
+                                        : student
+                                    )
+                                  }
                                 >
-                                  Delete
+                                  {selectedStudent === student
+                                    ? "Hide Details"
+                                    : "Show Details"}
                                 </Button>
-                              </div>
-                            </div>
-                          </TableCell>
-                        </TableRow>
+                              </td>
+                            </tr>
+                            {selectedStudent === student && (
+                              <tr className="bg-gray-50 dark:bg-gray-800">
+                                <td colSpan={3}>
+                                  <div className="p-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <div>
+                                        <p>
+                                          <strong>Student Name:</strong>{" "}
+                                          {student.studentName}
+                                        </p>
+                                        <p>
+                                          <strong>Parent Name:</strong>{" "}
+                                          {student.parentName}
+                                        </p>
+                                        <p>
+                                          <strong>Grade:</strong>{" "}
+                                          {student.grade}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p>
+                                          <strong>Parent Phone:</strong>{" "}
+                                          {student.parentPhone}
+                                        </p>
+                                        <p>
+                                          <strong>Parent Email:</strong>{" "}
+                                          {student.parentEmail}
+                                        </p>
+                                        <p>
+                                          <strong>Unique Code:</strong>{" "}
+                                          {student.uniqueCode}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="mt-4 flex justify-end">
+                                      <Button
+                                        className="text-sm font-medium mr-2"
+                                        onClick={() => handleEdit(student)}
+                                      >
+                                        Edit
+                                      </Button>
+                                      <Button
+                                        className="text-sm font-medium"
+                                        onClick={() =>
+                                          handleDelete(student._id)
+                                        }
+                                      >
+                                        Delete
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={3} className="text-center p-4">
+                            No entries found.
+                          </td>
+                        </tr>
                       )}
-                    </React.Fragment>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={3} className="text-center">
-                      No entries found.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </main>

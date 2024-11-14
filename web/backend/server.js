@@ -13,6 +13,9 @@ const uniqueCodeRoutes = require("./routes/uniqueCodeRoutes");
 const userRoutes = require("./routes/userRoutes");
 const parentStudentLinkRoutes = require("./routes/parentStudentRoutes");
 const authRoutes = require("./routes/authRoutes");
+const pickupRoutes = require("./routes/pickupRoutes");
+const authMiddleware = require('./middleware/authMiddleware');
+// app.use('/api/pickup', authMiddleware, pickupRoutes);
 
 // Middleware
 app.use(express.json());
@@ -29,6 +32,7 @@ app.use("/api/generate-codes", uniqueCodeRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/parent-student-links", parentStudentLinkRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/pickup", pickupRoutes);
 
 // 404 handler
 app.use((req, res) => {

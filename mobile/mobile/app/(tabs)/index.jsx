@@ -98,86 +98,85 @@ export default function HomeScreen() {
     setShowPickupModal(true);
   };
 
-const showAlert = (title, message) => {
-  if (Platform.OS === "web") {
-    alert(`${title}\n\n${message}`);
-  } else {
-    Alert.alert(title, message);
-  }
-};
+  const showAlert = (title, message) => {
+    if (Platform.OS === "web") {
+      alert(`${title}\n\n${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
 
+  const verifyAndAddStudent = async () => {
+    const userId = getUserId();
+    if (!userId) {
+      showAlert("Error", "Please ensure you are logged in to add students");
+      return;
+    }
 
- const verifyAndAddStudent = async () => {
-   const userId = getUserId();
-   if (!userId) {
-     showAlert("Error", "Please ensure you are logged in to add students");
-     return;
-   }
+    const trimmedCode = studentCode.trim().toUpperCase();
+    if (!trimmedCode) {
+      showAlert("Error", "Please enter a student code");
+      return;
+    }
 
-   const trimmedCode = studentCode.trim().toUpperCase();
-   if (!trimmedCode) {
-     showAlert("Error", "Please enter a student code");
-     return;
-   }
+    const isAlreadyLinked = linkedStudents.some(
+      (student) => student.code === trimmedCode
+    );
 
-   const isAlreadyLinked = linkedStudents.some(
-     (student) => student.code === trimmedCode
-   );
+    if (isAlreadyLinked) {
+      showAlert("Warning", "You have already linked this student.");
+      return;
+    }
 
-   if (isAlreadyLinked) {
-     showAlert("Warning", "You have already linked this student.");
-     return;
-   }
+    try {
+      const verifyResponse = await axios.get(
+        `http://192.168.100.3:5000/api/parent-student-links/verify/${trimmedCode}`
+      );
 
-   try {
-     const verifyResponse = await axios.get(
-       `http://localhost:5000/api/parent-student-links/verify/${trimmedCode}`
-     );
+      if (!verifyResponse.data.success) {
+        showAlert("Warning", "The entered student code does not exist.");
+        return;
+      }
 
-     if (!verifyResponse.data.success) {
-       showAlert("Warning", "The entered student code does not exist.");
-       return;
-     }
+      // Create the link
+      const createLinkResponse = await axios.post(
+        "http://192.168.100.3:5000/api/parent-student-links",
+        {
+          parentId: userId,
+          uniqueCode: trimmedCode,
+        }
+      );
 
-     // Create the link
-     const createLinkResponse = await axios.post(
-       "http://localhost:5000/api/parent-student-links",
-       {
-         parentId: userId,
-         uniqueCode: trimmedCode,
-       }
-     );
+      console.log("Create link response:", createLinkResponse.data); // Debug log
 
-     console.log("Create link response:", createLinkResponse.data); // Debug log
+      if (createLinkResponse.data.success) {
+        const newStudent = {
+          code: createLinkResponse.data.data.code,
+          name: createLinkResponse.data.data.name,
+          linkId: createLinkResponse.data.data.linkId,
+        };
 
-     if (createLinkResponse.data.success) {
-       const newStudent = {
-         code: createLinkResponse.data.data.code,
-         name: createLinkResponse.data.data.name,
-         linkId: createLinkResponse.data.data.linkId,
-       };
+        console.log("Adding new student:", newStudent); // Debug log
 
-       console.log("Adding new student:", newStudent); // Debug log
-
-       setLinkedStudents((prev) => [...prev, newStudent]);
-       setStudentCode("");
-       setShowAddModal(false);
-       Alert.alert("Success", "Student successfully linked to your account");
-     }
-   } catch (error) {
-     console.error("Error linking student:", error);
-     showAlert(
-       "Error",
-       error.response?.data?.message || "Failed to link student"
-     );
-   }
- };
+        setLinkedStudents((prev) => [...prev, newStudent]);
+        setStudentCode("");
+        setShowAddModal(false);
+        Alert.alert("Success", "Student successfully linked to your account");
+      }
+    } catch (error) {
+      console.error("Error linking student:", error);
+      showAlert(
+        "Error",
+        error.response?.data?.message || "Failed to link student"
+      );
+    }
+  };
 
   const loadStoredStudents = async (userId) => {
     try {
       // Updated to match the getParentLinks route
       const response = await axios.get(
-        `http://localhost:5000/api/parent-student-links/${userId}`
+        `http://192.168.100.3:5000/api/parent-student-links/${userId}`
       );
       if (response.data.success) {
         return response.data.data;
@@ -193,7 +192,7 @@ const showAlert = (title, message) => {
     try {
       // This path is correct as is
       const response = await axios.delete(
-        `http://localhost:5000/api/parent-student-links/${linkId}`
+        `http://192.168.100.3:5000/api/parent-student-links/${linkId}`
       );
 
       if (response.data.success) {
@@ -214,15 +213,50 @@ const showAlert = (title, message) => {
     }
 
     try {
-      await axios.post("http://localhost:5000/api/pickup", {
-        pickupCode: scannedPickupCode,
-        studentIds: selectedStudents,
-      });
+      // Get the user ID and info
+      const userId = getUserId();
+      if (!userId) {
+        Alert.alert("Error", "User ID not found. Please try logging in again.");
+        return;
+      }
 
-      Alert.alert(
-        "Success",
-        "Pickup registered successfully for selected students.",
-        [
+      // Get user info from the useAuth hook
+      const userInfo = user.data || user;
+      const parentName =
+        userInfo.name || userInfo.displayName || "Unknown Parent";
+      const parentEmail = userInfo.email || "N/A";
+
+      // Get selected students' info
+      const selectedStudentsInfo = linkedStudents
+        .filter((student) => selectedStudents.includes(student.linkId))
+        .map((student) => ({
+          name: student.name,
+          code: student.code,
+          linkId: student.linkId,
+        }));
+
+      // Create the pickup request
+      const pickupData = {
+        pickupCode: scannedPickupCode,
+        studentIds: selectedStudents, // Keep the original IDs for DB relations
+        // Add these new fields to match our web UI needs
+        studentInfo: selectedStudentsInfo,
+        parent: {
+          id: userId,
+          name: parentName,
+          email: parentEmail,
+        },
+      };
+
+      console.log("Sending pickup data:", pickupData); // Debug log
+
+      const response = await axios.post(
+        "http://192.168.100.3:5000/api/pickup",
+        pickupData
+      );
+
+      if (response.data.success) {
+        Alert.alert("Success", response.data.message, [
           {
             text: "OK",
             onPress: () => {
@@ -231,12 +265,59 @@ const showAlert = (title, message) => {
               setScannedPickupCode(null);
             },
           },
-        ]
-      );
+        ]);
+      } else {
+        Alert.alert("Error", response.data.message);
+      }
     } catch (error) {
-      console.error("Error registering pickup:", error);
-      Alert.alert("Error", "Failed to register pickup. Please try again.");
+      console.error("Pickup submission error:", error.response?.data || error);
+      Alert.alert(
+        "Error",
+        error.response?.data?.message || "Failed to register pickup"
+      );
     }
+  };
+
+  // And update the checkbox rendering:
+  const renderCheckboxItem = (student, index) => {
+    if (!student || !student.linkId) {
+      console.log("Invalid student data:", student);
+      return null;
+    }
+
+    return (
+      <View
+        key={`checkbox-${student.linkId}-${index}`}
+        style={styles.checkboxItem}
+      >
+        <Checkbox
+          value={selectedStudents.includes(student.linkId)}
+          onValueChange={(checked) => {
+            setSelectedStudents((prev) => {
+              // Create a new array to modify
+              const updatedSelection = [...prev];
+
+              if (checked) {
+                // Only add if not already included
+                if (!updatedSelection.includes(student.linkId)) {
+                  updatedSelection.push(student.linkId);
+                }
+              } else {
+                // Remove this student's ID if unchecked
+                const index = updatedSelection.indexOf(student.linkId);
+                if (index > -1) {
+                  updatedSelection.splice(index, 1);
+                }
+              }
+
+              return updatedSelection;
+            });
+          }}
+          style={styles.checkbox}
+        />
+        <Text style={styles.checkboxLabel}>{student.name}</Text>
+      </View>
+    );
   };
 
   const executeLogout = async () => {
@@ -305,77 +386,60 @@ const showAlert = (title, message) => {
     );
   };
 
-  const renderCheckboxItem = (student, index) => (
-    <View key={`checkbox-${student.id}-${index}`} style={styles.checkboxItem}>
-      <Checkbox
-        value={selectedStudents.includes(student.id)}
-        onValueChange={(checked) => {
-          setSelectedStudents((prev) =>
-            checked
-              ? [...prev, student.id]
-              : prev.filter((id) => id !== student.id)
-          );
-        }}
-        style={styles.checkbox}
-      />
-      <Text style={styles.checkboxLabel}>{student.name}</Text>
-    </View>
-  );
-
   const ProfileDropdown = () => {
-  const getUserInfo = () => {
-    if (!user) return { name: "User", email: "" };
+    const getUserInfo = () => {
+      if (!user) return { name: "User", email: "" };
 
-    // Handle both Google auth and manual login data structures
-    const userData = user.data || user;
-    
-    return {
-      name: userData.name || userData.displayName || "User",
-      email: userData.email || "",
-      profilePicture: userData.profilePicture || userData.picture || null
+      // Handle both Google auth and manual login data structures
+      const userData = user.data || user;
+
+      return {
+        name: userData.name || userData.displayName || "User",
+        email: userData.email || "",
+        profilePicture: userData.profilePicture || userData.picture || null,
+      };
     };
-  };
 
-  if (!showDropdown) return null;
+    if (!showDropdown) return null;
 
-  const userInfo = getUserInfo();
+    const userInfo = getUserInfo();
 
-  return (
-    <View style={styles.dropdownMenu}>
-      <View style={styles.dropdownHeader}>
-        {userInfo.profilePicture ? (
-          <Image
-            source={{ uri: userInfo.profilePicture }}
-            style={styles.dropdownProfileImage}
-          />
-        ) : (
-          <View style={styles.profileImageFallback}>
-            <User size={24} color="#666" />
+    return (
+      <View style={styles.dropdownMenu}>
+        <View style={styles.dropdownHeader}>
+          {userInfo.profilePicture ? (
+            <Image
+              source={{ uri: userInfo.profilePicture }}
+              style={styles.dropdownProfileImage}
+            />
+          ) : (
+            <View style={styles.profileImageFallback}>
+              <User size={24} color="#666" />
+            </View>
+          )}
+          <View style={styles.dropdownUserInfo}>
+            <Text style={styles.dropdownName}>{userInfo.name}</Text>
+            <Text style={styles.dropdownEmail}>{userInfo.email}</Text>
           </View>
-        )}
-        <View style={styles.dropdownUserInfo}>
-          <Text style={styles.dropdownName}>{userInfo.name}</Text>
-          <Text style={styles.dropdownEmail}>{userInfo.email}</Text>
         </View>
+        <View style={styles.dropdownDivider} />
+        <TouchableOpacity
+          style={styles.dropdownItem}
+          onPress={handleLogout}
+          disabled={isLoggingOut}
+        >
+          {isLoggingOut ? (
+            <ActivityIndicator size="small" color="#FF0000" />
+          ) : (
+            <>
+              <LogOut size={20} color="#FF0000" />
+              <Text style={styles.dropdownText}>Logout</Text>
+            </>
+          )}
+        </TouchableOpacity>
       </View>
-      <View style={styles.dropdownDivider} />
-      <TouchableOpacity
-        style={styles.dropdownItem}
-        onPress={handleLogout}
-        disabled={isLoggingOut}
-      >
-        {isLoggingOut ? (
-          <ActivityIndicator size="small" color="#FF0000" />
-        ) : (
-          <>
-            <LogOut size={20} color="#FF0000" />
-            <Text style={styles.dropdownText}>Logout</Text>
-          </>
-        )}
-      </TouchableOpacity>
-    </View>
-  );
-};
+    );
+  };
 
   if (hasPermission === null) {
     return <Text>Requesting camera permission</Text>;
