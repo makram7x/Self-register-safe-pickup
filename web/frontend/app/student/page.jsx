@@ -321,6 +321,10 @@ export default function StudentPage() {
     setShowConfirmationModal(false);
     setIsGenerating(true);
     try {
+      // First, delete all parent-student links
+      await axios.delete("http://localhost:5000/api/parent-student-links/all");
+
+      // Then proceed with code generation
       const response = await axios.put(
         "http://localhost:5000/api/generate-codes"
       );
@@ -408,6 +412,41 @@ export default function StudentPage() {
   useEffect(() => {
     setFilteredStudents(students);
   }, [students]);
+
+  const downloadStudentCodes = () => {
+    if (!newlyGeneratedCodes.length) return;
+
+    // Create CSV content
+    const csvContent = [
+      ["Student Name", "Grade", "Parent Name", "Unique Code"], // Header row
+      ...newlyGeneratedCodes.map((student) => [
+        student.studentName,
+        student.grade,
+        student.parentName,
+        student.uniqueCode,
+      ]),
+    ]
+      .map((row) => row.join(","))
+      .join("\n");
+
+    // Create blob and download link
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+
+    // Set download attributes
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `student_codes_${new Date().toISOString().split("T")[0]}.csv`
+    );
+    link.style.visibility = "hidden";
+
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="h-screen flex flex-col">
@@ -572,9 +611,9 @@ export default function StudentPage() {
                             </p>
                           )}
                         </div>
-                        <div className="flex justify-end mt-4">
+                        <div className="flex justify-end mt-4 space-x-2">
                           <button
-                            className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded mr-2 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                            className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                             onClick={() => {
                               setShowAnnouncementModal(false);
                               setNewlyGeneratedCodes([]);
@@ -582,6 +621,14 @@ export default function StudentPage() {
                           >
                             Close
                           </button>
+                          {newlyGeneratedCodes.length > 0 && (
+                            <button
+                              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+                              onClick={downloadStudentCodes}
+                            >
+                              Download CSV
+                            </button>
+                          )}
                           {!newlyGeneratedCodes[0]?.hasOwnProperty(
                             "uniqueCode"
                           ) && (

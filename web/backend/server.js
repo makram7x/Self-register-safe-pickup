@@ -14,6 +14,7 @@ const userRoutes = require("./routes/userRoutes");
 const parentStudentLinkRoutes = require("./routes/parentStudentRoutes");
 const authRoutes = require("./routes/authRoutes");
 const pickupRoutes = require("./routes/pickupRoutes");
+const qrCodeRoutes = require("./routes/qrCodeRoutes");
 const authMiddleware = require('./middleware/authMiddleware');
 // app.use('/api/pickup', authMiddleware, pickupRoutes);
 
@@ -33,6 +34,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/parent-student-links", parentStudentLinkRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/pickup", pickupRoutes);
+app.use("/api/qr-codes", qrCodeRoutes);
 
 // 404 handler
 app.use((req, res) => {

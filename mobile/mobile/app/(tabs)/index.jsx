@@ -130,7 +130,7 @@ export default function HomeScreen() {
 
     try {
       const verifyResponse = await axios.get(
-        `http://192.168.100.3:5000/api/parent-student-links/verify/${trimmedCode}`
+        `http://localhost:5000/api/parent-student-links/verify/${trimmedCode}`
       );
 
       if (!verifyResponse.data.success) {
@@ -140,7 +140,7 @@ export default function HomeScreen() {
 
       // Create the link
       const createLinkResponse = await axios.post(
-        "http://192.168.100.3:5000/api/parent-student-links",
+        "http://localhost:5000/api/parent-student-links",
         {
           parentId: userId,
           uniqueCode: trimmedCode,
@@ -176,7 +176,7 @@ export default function HomeScreen() {
     try {
       // Updated to match the getParentLinks route
       const response = await axios.get(
-        `http://192.168.100.3:5000/api/parent-student-links/${userId}`
+        `http://localhost:5000/api/parent-student-links/${userId}`
       );
       if (response.data.success) {
         return response.data.data;
@@ -192,7 +192,7 @@ export default function HomeScreen() {
     try {
       // This path is correct as is
       const response = await axios.delete(
-        `http://192.168.100.3:5000/api/parent-student-links/${linkId}`
+        `http://localhost:5000/api/parent-student-links/${linkId}`
       );
 
       if (response.data.success) {
@@ -251,7 +251,7 @@ export default function HomeScreen() {
       console.log("Sending pickup data:", pickupData); // Debug log
 
       const response = await axios.post(
-        "http://192.168.100.3:5000/api/pickup",
+        "http://localhost:5000/api/pickup",
         pickupData
       );
 

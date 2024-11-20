@@ -37,8 +37,7 @@ const getParentPickups = async (req, res) => {
 const updatePickupStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
-    const parentId = req.user?._id || req.user?.id || req.user;
+    const { status, updatedBy, notes } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -47,24 +46,37 @@ const updatePickupStatus = async (req, res) => {
       });
     }
 
-    const pickup = await Pickup.findOne({
-      _id: id,
-      parentId: parentId,
-    });
+    const pickup = await Pickup.findById(id);
 
     if (!pickup) {
       return res.status(404).json({
         success: false,
-        message: "Pickup not found or unauthorized",
+        message: "Pickup not found",
       });
     }
 
+    // Update pickup status and add to status history
     pickup.status = status;
+    pickup.statusHistory.push({
+      status,
+      updatedBy,
+      updatedAt: new Date(),
+      notes,
+    });
+
+    if (status === "completed") {
+      pickup.completedAt = new Date();
+      pickup.completedBy = updatedBy;
+    }
+
     await pickup.save();
 
-    res.status(200).json({
+    // You might want to emit a websocket event here for real-time updates
+    // socketIO.emit('pickup-status-updated', { pickupId: id, status });
+
+    res.json({
       success: true,
-      message: "Pickup status updated successfully",
+      message: `Pickup status updated to ${status}`,
       data: pickup,
     });
   } catch (error) {

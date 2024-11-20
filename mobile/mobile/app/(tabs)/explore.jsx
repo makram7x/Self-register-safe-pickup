@@ -32,8 +32,11 @@ export default function NotificationsScreen() {
 
   const fetchNotifications = useCallback(async () => {
     try {
+      // const response = await fetch(
+      //   "http://192.168.100.3:5000/api/notifications"
+      // );
       const response = await fetch(
-        "http://192.168.100.3:5000/api/notifications"
+        "http://localhost:5000/api/notifications"
       );
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

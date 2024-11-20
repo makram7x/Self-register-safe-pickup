@@ -47,6 +47,27 @@ const pickupSchema = new Schema(
       type: Date,
       default: Date.now,
     },
+    statusHistory: [
+      {
+        status: {
+          type: String,
+          enum: ["pending", "completed", "cancelled"],
+          required: true,
+        },
+        updatedBy: {
+          type: String,
+          required: true,
+        },
+        updatedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        notes: String,
+      },
+    ],
+
+    completedAt: Date,
+    completedBy: String,
   },
   {
     timestamps: true,

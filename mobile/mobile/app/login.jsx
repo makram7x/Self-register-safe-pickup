@@ -60,7 +60,8 @@ const AuthForms = () => {
         ...(!isLogin && formData.name && { name: formData.name }),
       };
 
-      const response = await fetch(`http://192.168.100.3:5000${endpoint}`, {
+      // const response = await fetch(`http://192.168.100.3:5000${endpoint}`, {
+      const response = await fetch(`http://localhost:5000${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -231,13 +232,17 @@ export default function LoginScreen() {
         profilePicture: googleUser.picture,
       };
 
-      const serverResponse = await fetch("http://192.168.100.3:5000/api/users", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(userData),
-      });
+      // const serverResponse = await fetch("http://192.168.100.3:5000/api/users", {
+      const serverResponse = await fetch(
+        "http://localhost:5000/api/users",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(userData),
+        }
+      );
 
       if (!serverResponse.ok) {
         throw new Error(`Server error: ${serverResponse.status}`);

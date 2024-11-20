@@ -196,10 +196,36 @@ const verifyLink = async (req, res) => {
   }
 };
 
+const deleteAllLinks = async (req, res) => {
+  try {
+    // Use updateMany to soft delete all active links
+    const result = await ParentStudentLink.updateMany(
+      { active: true },
+      { $set: { active: false } }
+    );
+
+    console.log("Deleted all parent-student links:", result);
+
+    res.status(200).json({
+      success: true,
+      message: `Deactivated ${result.modifiedCount} parent-student links`,
+      deletedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    console.error("Error deleting all parent-student links:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error deleting parent-student links",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getParentLinks,
   createLink,
   deleteLink,
   verifyLink,
   debugLinks,
+  deleteAllLinks,
 };
