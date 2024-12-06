@@ -14,13 +14,14 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native";
-import { BarCodeScanner } from "expo-barcode-scanner";
+import { Camera, CameraView } from "expo-camera"; // Simplified camera import
 import { ThemedView } from "../../components/ThemedView";
-import { QrCode, PlusCircle, LogOut, User } from "lucide-react-native";
 import Checkbox from "expo-checkbox";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../../contexts/AuthContext";
+import { QrCode, PlusCircle, LogOut, User } from "lucide-react-native";
+import QRScanner from "../../components/QRscanner";
 
 export default function HomeScreen() {
   const [hasPermission, setHasPermission] = useState(null);
@@ -36,9 +37,72 @@ export default function HomeScreen() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  // Single initialization useEffect
+  useEffect(() => {
+    const initialize = async () => {
+      if (!user) {
+        console.log("No user available for initialization");
+        return;
+      }
+
+      const userId = getUserId();
+      if (!userId) {
+        console.warn("Cannot initialize - no valid user ID");
+        return;
+      }
+
+      try {
+        console.log("Requesting camera permission...");
+        const { status } = await Camera.requestCameraPermissionsAsync();
+        console.log("Camera permission status:", status);
+        setHasPermission(status === "granted");
+      } catch (error) {
+        console.error("Error requesting camera permission:", error);
+        setHasPermission(false);
+      }
+
+      try {
+        const storedStudents = await loadStoredStudents(userId);
+        setLinkedStudents(storedStudents);
+      } catch (error) {
+        console.error("Error loading students:", error);
+        Alert.alert("Error", "Failed to load student data");
+      }
+
+      setIsInitialized(true);
+    };
+
+    initialize();
+  }, [user]);
+
+  const handleBarCodeScanned = ({ type, data }) => {
+    console.log("Main component received scan:");
+    console.log("Type:", type);
+    console.log("Data:", data);
+
+    if (type === "qr" || type === "org.iso.QRCode") {
+      console.log("Valid QR code detected, processing...");
+      setScanning(false);
+      setScannedPickupCode(data);
+      setShowPickupModal(true);
+    } else {
+      console.log("Ignoring non-QR code scan");
+    }
+  };
+
+ const renderCamera = () => {
+   if (!scanning) return null;
+
+   return (
+     <QRScanner
+       onBarCodeScanned={handleBarCodeScanned}
+       onCancel={() => setScanning(false)}
+     />
+   );
+ };
+
   const getUserId = () => {
     if (!user) return null;
-
     const userData = user.data || user;
     const possibleIdFields = ["_id", "id", "uid", "userId"];
 
@@ -48,12 +112,67 @@ export default function HomeScreen() {
       }
     }
 
-    if (userData.email) {
-      return `email_${userData.email.replace(/[^a-zA-Z0-9]/g, "_")}`;
-    }
-
-    return null;
+    return userData.email
+      ? `email_${userData.email.replace(/[^a-zA-Z0-9]/g, "_")}`
+      : null;
   };
+
+  // Updated permission request for Camera
+  const requestCameraPermission = async () => {
+    const { status } = await Camera.requestCameraPermissionsAsync();
+    setHasPermission(status === "granted");
+  };
+
+  // // Updated QR code scanning handler
+  // const handleBarCodeScanned = ({ type, data }) => {
+  //   if (type === "qr" || type === "org.iso.QRCode") {
+  //     setScanning(false);
+  //     setScannedPickupCode(data);
+  //     setShowPickupModal(true);
+  //   }
+  // };
+
+  // Rest of your component remains the same, but update the camera view:
+  // const renderCamera = () => {
+  //   if (!scanning) return null;
+
+  //   return (
+  //     <ThemedView style={styles.cameraContainer}>
+  //       <Camera
+  //         style={StyleSheet.absoluteFillObject}
+  //         onBarCodeScanned={handleBarCodeScanned}
+  //         barCodeScannerSettings={{
+  //           barCodeTypes: ["qr"],
+  //         }}
+  //       />
+  //       <TouchableOpacity
+  //         style={styles.cancelScanButton}
+  //         onPress={() => setScanning(false)}
+  //       >
+  //         <Text style={styles.cancelScanText}>Cancel Scan</Text>
+  //       </TouchableOpacity>
+  //     </ThemedView>
+  //   );
+  // };
+
+  // const getUserId = () => {
+  //   if (!user) return null;
+
+  //   const userData = user.data || user;
+  //   const possibleIdFields = ["_id", "id", "uid", "userId"];
+
+  //   for (const field of possibleIdFields) {
+  //     if (userData[field]) {
+  //       return userData[field];
+  //     }
+  //   }
+
+  //   if (userData.email) {
+  //     return `email_${userData.email.replace(/[^a-zA-Z0-9]/g, "_")}`;
+  //   }
+
+  //   return null;
+  // };
 
   // Single initialization useEffect
   useEffect(() => {
@@ -87,16 +206,16 @@ export default function HomeScreen() {
     initialize();
   }, [user]);
 
-  const requestCameraPermission = async () => {
-    const { status } = await BarCodeScanner.requestPermissionsAsync();
-    setHasPermission(status === "granted");
-  };
+  // const requestCameraPermission = async () => {
+  //   const { status } = await BarCodeScanner.requestPermissionsAsync();
+  //   setHasPermission(status === "granted");
+  // };
 
-  const handleBarCodeScanned = ({ type, data }) => {
-    setScanning(false);
-    setScannedPickupCode(data);
-    setShowPickupModal(true);
-  };
+  // const handleBarCodeScanned = ({ type, data }) => {
+  //   setScanning(false);
+  //   setScannedPickupCode(data);
+  //   setShowPickupModal(true);
+  // };
 
   const showAlert = (title, message) => {
     if (Platform.OS === "web") {
@@ -130,7 +249,7 @@ export default function HomeScreen() {
 
     try {
       const verifyResponse = await axios.get(
-        `http://localhost:5000/api/parent-student-links/verify/${trimmedCode}`
+        `http://192.168.100.3:5000/api/parent-student-links/verify/${trimmedCode}`
       );
 
       if (!verifyResponse.data.success) {
@@ -140,7 +259,7 @@ export default function HomeScreen() {
 
       // Create the link
       const createLinkResponse = await axios.post(
-        "http://localhost:5000/api/parent-student-links",
+        "http://192.168.100.3:5000/api/parent-student-links",
         {
           parentId: userId,
           uniqueCode: trimmedCode,
@@ -176,7 +295,7 @@ export default function HomeScreen() {
     try {
       // Updated to match the getParentLinks route
       const response = await axios.get(
-        `http://localhost:5000/api/parent-student-links/${userId}`
+        `http://192.168.100.3:5000/api/parent-student-links/${userId}`
       );
       if (response.data.success) {
         return response.data.data;
@@ -192,7 +311,7 @@ export default function HomeScreen() {
     try {
       // This path is correct as is
       const response = await axios.delete(
-        `http://localhost:5000/api/parent-student-links/${linkId}`
+        `http://192.168.100.3:5000/api/parent-student-links/${linkId}`
       );
 
       if (response.data.success) {
@@ -251,7 +370,7 @@ export default function HomeScreen() {
       console.log("Sending pickup data:", pickupData); // Debug log
 
       const response = await axios.post(
-        "http://localhost:5000/api/pickup",
+        "http://192.168.100.3:5000/api/pickup",
         pickupData
       );
 
@@ -452,6 +571,7 @@ export default function HomeScreen() {
     <ThemedView style={styles.container}>
       <TouchableWithoutFeedback onPress={handleGlobalPress}>
         <View style={styles.contentContainer}>
+          {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>Code with Beto</Text>
             <TouchableOpacity
@@ -476,6 +596,7 @@ export default function HomeScreen() {
 
           <ProfileDropdown />
 
+          {/* Students List */}
           <ScrollView style={styles.studentsList}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Linked Students</Text>
@@ -494,20 +615,14 @@ export default function HomeScreen() {
             )}
           </ScrollView>
 
+          {/* Camera Button and Scanner */}
           <Button
             title={scanning ? "Cancel Scan" : "Scan QR Code"}
             onPress={() => setScanning(!scanning)}
             disabled={linkedStudents.length === 0}
           />
 
-          {scanning && (
-            <ThemedView style={styles.cameraContainer}>
-              <BarCodeScanner
-                onBarCodeScanned={handleBarCodeScanned}
-                style={StyleSheet.absoluteFillObject}
-              />
-            </ThemedView>
-          )}
+          {renderCamera()}
 
           <Modal
             animationType="fade"
@@ -905,5 +1020,46 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#FF0000",
     fontWeight: "500",
+  },
+  cameraContainer: {
+    width: "100%",
+    aspectRatio: 1,
+    overflow: "hidden",
+    marginTop: 20,
+    position: "relative",
+  },
+  cancelScanButton: {
+    position: "absolute",
+    bottom: 20,
+    alignSelf: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    padding: 15,
+    borderRadius: 8,
+  },
+  cancelScanText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  permissionText: {
+    fontSize: 16,
+    textAlign: "center",
+    marginTop: 10,
+  },
+  retryButton: {
+    marginTop: 15,
+    padding: 10,
+    backgroundColor: "#4CAF50",
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: "white",
+    fontSize: 16,
   },
 });

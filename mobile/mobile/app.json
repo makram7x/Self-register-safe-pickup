@@ -16,9 +16,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.makram7x.selfregistersafepickup",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
-      },
-      "googleServicesFile": "./GoogleService-Info.plist"
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -26,7 +27,6 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.makram7x.mobile",
-      "googleServicesFile": "./google-services.json",
       "permissions": [
         "NOTIFICATIONS",
         "android.permission.CAMERA",
@@ -41,6 +41,8 @@
           "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera."
         }
       ],
+      "expo-font",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
