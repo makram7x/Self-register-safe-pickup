@@ -188,8 +188,12 @@ export default function Notifications() {
   }, []);
 
   return (
-    <div>
-      <div className="flex flex-col">
+    <div className="h-screen flex flex-col overflow-hidden">
+      {" "}
+      {/* Add overflow-hidden */}
+      <div className="flex-1 flex flex-col overflow-auto">
+        {" "}
+        {/* Add overflow-auto */}
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
           <div className="flex items-center justify-between">
             <Card className="w-full">
@@ -240,7 +244,7 @@ export default function Notifications() {
                   className="dark:bg-gray-800"
                 />
               </CardHeader>
-              <CardContent>
+              <CardContent className="overflow-auto">
                 <div className="bg-white dark:bg-gray-900 p-6">
                   <div className="space-y-4">
                     {announcements.map((announcement) => (

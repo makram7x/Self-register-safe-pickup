@@ -301,8 +301,12 @@ export default function PickupPage() {
   };
 
   return (
-    <div className="h-screen flex flex-col">
-      <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6 overflow-hidden">
+    <div className="h-screen flex flex-col overflow-hidden">
+      {" "}
+      {/* Add overflow-hidden */}
+      <main className="flex-1 flex flex-col gap-4 p-4 md:gap-8 md:p-6 overflow-auto">
+        {" "}
+        {/* Add overflow-auto */}
         <Card className="flex-1 flex flex-col">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-2xl font-bold dark:text-white">
@@ -330,7 +334,7 @@ export default function PickupPage() {
             </div>
           </CardHeader>
 
-          <CardContent className="flex-1 overflow-hidden">
+          <CardContent className="flex-1 overflow-auto">
             {loading && Object.keys(pickupLogs).length === 0 ? (
               <div className="flex justify-center items-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
@@ -349,7 +353,6 @@ export default function PickupPage() {
           </CardContent>
         </Card>
       </main>
-
       {/* Delete All Modal */}
       {showDeleteAllModal && (
         <div className="fixed z-10 inset-0 overflow-y-auto">
@@ -400,7 +403,6 @@ export default function PickupPage() {
           </div>
         </div>
       )}
-
       {/* Delete Single Log Modal */}
       {showDeleteModal && (
         <div className="fixed z-10 inset-0 overflow-y-auto">
