@@ -102,7 +102,7 @@ export default function AnnouncementModal({ open, onClose, onSubmit }) {
           >
             <Input
               placeholder="Enter announcement title"
-              className="dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+              className="dark:bg-gray-700 dark:border-gray-600 dark:text-black dark:placeholder-gray-400"
             />
           </Form.Item>
 
@@ -123,7 +123,7 @@ export default function AnnouncementModal({ open, onClose, onSubmit }) {
             <TextArea
               rows={4}
               placeholder="Enter announcement description"
-              className="dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+              className="dark:bg-gray-700 dark:border-gray-600 dark:text-black dark:placeholder-gray-400"
             />
           </Form.Item>
 

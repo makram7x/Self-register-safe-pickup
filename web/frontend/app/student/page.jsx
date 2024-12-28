@@ -109,29 +109,39 @@ export default function StudentPage() {
   const handleDeleteAllStudents = async () => {
     setIsDeletingAll(true);
     try {
-      const response = await axios.delete(
+      // First delete all parent-student links
+      const linksResponse = await axios.delete(
+        "http://localhost:5000/api/parent-student-links/delete-all"
+      );
+      console.log(
+        "Parent-student links deletion response:",
+        linksResponse.data
+      );
+
+      // Then delete all students
+      const studentsResponse = await axios.delete(
         "http://localhost:5000/api/students/delete-all"
       );
-      if (response.status === 200) {
-        console.log("All students deleted successfully");
-        // Optional: Show how many students were deleted
-        const deletedCount = response.data.deletedCount;
+
+      if (studentsResponse.status === 200) {
+        const deletedCount = studentsResponse.data.deletedCount;
+        const linksCount = linksResponse.data.deletedCount || 0;
+
         alert(
           `Successfully deleted ${deletedCount} student${
             deletedCount !== 1 ? "s" : ""
-          }`
+          } and ${linksCount} associated link${linksCount !== 1 ? "s" : ""}`
         );
         await fetchStudents();
         setShowDeleteAllModal(false);
       } else {
-        console.error("Failed to delete all students");
-        alert("Failed to delete all students. Please try again.");
+        throw new Error("Failed to delete students");
       }
     } catch (error) {
-      console.error("Error deleting all students:", error);
+      console.error("Error in deletion process:", error);
       alert(
-        `Error deleting all students: ${
-          error.response?.data?.message || "Please try again."
+        `Error during deletion: ${
+          error.response?.data?.message || error.message || "Please try again."
         }`
       );
     } finally {
@@ -453,7 +463,7 @@ export default function StudentPage() {
       <main className="flex flex-1 flex-col p-4 md:p-6 overflow-hidden">
         <Card className="flex-1 flex flex-col">
           <CardHeader className="flex flex-col items-center justify-between pb-2 space-y-4 md:flex-row md:space-y-0">
-            <CardTitle className="text-sm font-medium">Students</CardTitle>
+            <CardTitle className="text-xl font-medium">Students Management</CardTitle>
             <div className="flex items-center space-x-4">
               <div className="flex items-center">
                 <DropdownMenu>
@@ -506,55 +516,8 @@ export default function StudentPage() {
                   <SearchIcon className="h-4 w-4" />
                 </Button>
               </div>
-              <button
-                className={`text-sm font-medium bg-green-500 text-white px-4 py-2 rounded transition duration-150 ease-in-out ${
-                  isGenerating
-                    ? "opacity-75 cursor-not-allowed"
-                    : "hover:bg-green-600 active:bg-green-700"
-                }`}
-                onClick={() => setShowConfirmationModal(true)}
-                disabled={isGenerating}
-              >
-                {isGenerating ? "Generating..." : "Generate New Codes"}
-              </button>
-              {showConfirmationModal && (
-                <div className="fixed z-10 inset-0 overflow-y-auto">
-                  <div className="flex items-center justify-center min-h-screen">
-                    <div
-                      className="fixed inset-0 transition-opacity"
-                      onClick={() => setShowConfirmationModal(false)}
-                    >
-                      <div className="absolute inset-0 bg-gray-500/75 dark:bg-gray-900/80"></div>
-                    </div>
-
-                    <div className="bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-xl transform transition-all sm:max-w-lg sm:w-full">
-                      <div className="px-4 pt-5 pb-4 sm:p-6">
-                        <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-                          Confirmation
-                        </h2>
-                        <p className="mb-4 text-gray-700 dark:text-gray-300">
-                          Are you sure you want to generate new codes for all
-                          students?
-                        </p>
-                        <div className="flex justify-end">
-                          <button
-                            className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded mr-2 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                            onClick={() => setShowConfirmationModal(false)}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
-                            onClick={generateNewCode}
-                          >
-                            Confirm
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              
+              
               {showAnnouncementModal && (
                 <div className="fixed z-10 inset-0 overflow-y-auto">
                   <div className="flex items-center justify-center min-h-screen">

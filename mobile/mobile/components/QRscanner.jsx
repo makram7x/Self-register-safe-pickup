@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import {
   CameraView,
@@ -8,11 +8,15 @@ import {
 
 const QRScanner = ({ onBarCodeScanned, onCancel }) => {
   const [permission, requestPermission] = useCameraPermissions();
+  const [isScanning, setIsScanning] = useState(true);
 
   useEffect(() => {
     console.log("QRScanner mounted. Permission status:", permission?.granted);
+    // Reset scanning state when component mounts
+    setIsScanning(true);
     return () => {
       console.log("QRScanner unmounted");
+      setIsScanning(false);
     };
   }, []);
 
@@ -21,8 +25,16 @@ const QRScanner = ({ onBarCodeScanned, onCancel }) => {
     console.log("Scan type:", result.type);
     console.log("Scan data:", result.data);
 
+    if (!isScanning) return; // Prevent multiple scans
+
+    setIsScanning(false); // Disable scanning temporarily
     // Call the parent's handler
     onBarCodeScanned(result);
+  };
+
+  const handleCancel = () => {
+    setIsScanning(false);
+    onCancel();
   };
 
   if (!permission) {
@@ -55,7 +67,10 @@ const QRScanner = ({ onBarCodeScanned, onCancel }) => {
     );
   }
 
-  console.log("Camera permission granted, rendering camera view");
+  console.log(
+    "Camera permission granted, rendering camera view. Scanning state:",
+    isScanning
+  );
 
   return (
     <View style={styles.container}>
@@ -66,9 +81,10 @@ const QRScanner = ({ onBarCodeScanned, onCancel }) => {
         barcodeScannerSettings={{
           barcodeTypes: ["qr"],
         }}
-        onBarcodeScanned={handleBarCodeScanned}
+        onBarcodeScanned={isScanning ? handleBarCodeScanned : undefined}
         onCameraReady={() => {
           console.log("Camera is ready for scanning");
+          setIsScanning(true); // Enable scanning when camera is ready
         }}
         onMountError={(error) => {
           console.error("Camera mount error:", error);
@@ -76,15 +92,13 @@ const QRScanner = ({ onBarCodeScanned, onCancel }) => {
       >
         <View style={styles.overlay}>
           <View style={styles.scanArea}>
-            <Text style={styles.scanText}>Position QR code in this area</Text>
+            <Text style={styles.scanText}>
+              {isScanning
+                ? "Position QR code in this area"
+                : "Processing scan..."}
+            </Text>
           </View>
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={() => {
-              console.log("Scan cancelled by user");
-              onCancel();
-            }}
-          >
+          <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
             <Text style={styles.cancelButtonText}>Cancel Scan</Text>
           </TouchableOpacity>
         </View>

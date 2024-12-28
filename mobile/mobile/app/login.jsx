@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as Google from "expo-auth-session/providers/google";
@@ -21,11 +22,11 @@ import { useRouter } from "expo-router";
 
 WebBrowser.maybeCompleteAuthSession();
 
-// AuthForms Component
 const AuthForms = () => {
   const { signIn } = useAuth();
   const router = useRouter();
   const [isLogin, setIsLogin] = useState(true);
+  const [isDriver, setIsDriver] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
@@ -33,50 +34,151 @@ const AuthForms = () => {
     email: "",
     password: "",
     confirmPassword: "",
+    verificationCode: "",
   });
 
   const handleSubmit = async () => {
     setError(null);
     setIsLoading(true);
 
-    if (!formData.email || !formData.password) {
-      setError("Please fill in all required fields");
-      setIsLoading(false);
-      return;
-    }
-
-    if (!isLogin && formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match");
-      setIsLoading(false);
-      return;
-    }
- 
     try {
-      // In your AuthForms component:
-      const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register";
-      const userData = {
-        email: formData.email,
-        password: formData.password,
-        ...(!isLogin && formData.name && { name: formData.name }),
-      };
+      if (isDriver) {
+        // Driver authentication logic
+        if (isLogin) {
+          // Driver Login - needs email and password
+          if (!formData.email || !formData.password) {
+            throw new Error("Please enter your email and password");
+          }
 
-      // const response = await fetch(`http://192.168.100.3:5000${endpoint}`, {
-      const response = await fetch(`http://localhost:5000${endpoint}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(userData),
-      });
+          const response = await fetch(
+            "http://192.168.100.3:5000/api/drivers/login",
+            {
+              // Updated endpoint
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                email: formData.email,
+                password: formData.password,
+              }),
+            }
+          );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Authentication failed");
+          if (response.ok) {
+            const data = await response.json();
+            console.log("Login response:", data); // Debug log
+
+            if (data.success) {
+              // Create driver data object with proper structure
+              const driverData = {
+                id: data.data.driver.id,
+                name: data.data.driver.name,
+                email: data.data.driver.email,
+                phone: data.data.driver.phone,
+                isDriver: true,
+                parentId: data.data.driver.parentId,
+                token: data.data.token,
+              };
+
+              await signIn({
+                success: true,
+                data: {
+                  driver: driverData,
+                  token: data.data.token,
+                },
+                isDriver: true,
+              });
+              router.replace("/(tabs)");
+            } else {
+              throw new Error(data.message || "Login failed");
+            }
+          }
+        } else {
+          // Driver Registration - needs verification code and new password
+          if (
+            !formData.verificationCode ||
+            !formData.password ||
+            !formData.confirmPassword
+          ) {
+            throw new Error(
+              "Please enter verification code and set your password"
+            );
+          }
+
+          if (formData.password !== formData.confirmPassword) {
+            throw new Error("Passwords do not match");
+          }
+
+          const response = await fetch(
+            "http://192.168.100.3:5000/api/drivers/register",
+            {
+              // Updated endpoint
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                verificationCode: formData.verificationCode,
+                password: formData.password,
+              }),
+            }
+          );
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || "Registration failed");
+          }
+
+          const data = await response.json();
+          Alert.alert(
+            "Registration Successful",
+            "You can now login with your email and password",
+            [
+              {
+                text: "OK",
+                onPress: () => {
+                  setIsLogin(true);
+                  resetForm();
+                },
+              },
+            ]
+          );
+        }
+      } else {
+        // Parent authentication logic (remains unchanged)
+        if (!formData.email || !formData.password) {
+          throw new Error("Please fill in all required fields");
+        }
+
+        if (!isLogin && formData.password !== formData.confirmPassword) {
+          throw new Error("Passwords do not match");
+        }
+
+        const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register";
+        const userData = {
+          email: formData.email,
+          password: formData.password,
+          ...(!isLogin && formData.name && { name: formData.name }),
+        };
+
+        const response = await fetch(`http://192.168.100.3:5000${endpoint}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(userData),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Authentication failed");
+        }
+
+        const savedUser = await response.json();
+        await signIn({ ...savedUser, isDriver: false });
+        router.replace("/(tabs)");
       }
-
-      const savedUser = await response.json();
-      await signIn(savedUser);
-      router.replace("/(tabs)");
     } catch (error) {
       console.error("Auth error:", error);
       setError(error.message || "Authentication failed. Please try again.");
@@ -85,51 +187,161 @@ const AuthForms = () => {
     }
   };
 
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+      verificationCode: "",
+    });
+    setError(null);
+  };
+
   return (
     <View style={styles.formContainer}>
-      {!isLogin && (
-        <TextInput
-          style={styles.input}
-          placeholder="Full Name"
-          value={formData.name}
-          onChangeText={(text) =>
-            setFormData((prev) => ({ ...prev, name: text }))
-          }
-          autoCapitalize="words"
-        />
-      )}
+      {/* User Type Toggle */}
+      <View style={styles.userTypeToggle}>
+        <TouchableOpacity
+          style={[styles.toggleButton, !isDriver && styles.toggleButtonActive]}
+          onPress={() => {
+            setIsDriver(false);
+            resetForm();
+          }}
+        >
+          <Text
+            style={[
+              styles.toggleButtonText,
+              !isDriver && styles.toggleButtonTextActive,
+            ]}
+          >
+            Parent
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toggleButton, isDriver && styles.toggleButtonActive]}
+          onPress={() => {
+            setIsDriver(true);
+            resetForm();
+          }}
+        >
+          <Text
+            style={[
+              styles.toggleButtonText,
+              isDriver && styles.toggleButtonTextActive,
+            ]}
+          >
+            Driver
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={formData.email}
-        onChangeText={(text) =>
-          setFormData((prev) => ({ ...prev, email: text }))
-        }
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={formData.password}
-        onChangeText={(text) =>
-          setFormData((prev) => ({ ...prev, password: text }))
-        }
-        secureTextEntry
-      />
-
-      {!isLogin && (
-        <TextInput
-          style={styles.input}
-          placeholder="Confirm Password"
-          value={formData.confirmPassword}
-          onChangeText={(text) =>
-            setFormData((prev) => ({ ...prev, confirmPassword: text }))
-          }
-          secureTextEntry
-        />
+      {/* Conditional Form Fields */}
+      {isDriver ? (
+        // Driver Form Fields
+        isLogin ? (
+          // Driver Login
+          <>
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              value={formData.email}
+              onChangeText={(text) =>
+                setFormData((prev) => ({ ...prev, email: text }))
+              }
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              value={formData.password}
+              onChangeText={(text) =>
+                setFormData((prev) => ({ ...prev, password: text }))
+              }
+              secureTextEntry
+            />
+          </>
+        ) : (
+          // Driver Registration
+          <>
+            <TextInput
+              style={styles.input}
+              placeholder="Verification Code"
+              value={formData.verificationCode}
+              onChangeText={(text) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  verificationCode: text.toUpperCase(),
+                }))
+              }
+              autoCapitalize="characters"
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Set Password"
+              value={formData.password}
+              onChangeText={(text) =>
+                setFormData((prev) => ({ ...prev, password: text }))
+              }
+              secureTextEntry
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Confirm Password"
+              value={formData.confirmPassword}
+              onChangeText={(text) =>
+                setFormData((prev) => ({ ...prev, confirmPassword: text }))
+              }
+              secureTextEntry
+            />
+          </>
+        )
+      ) : (
+        // Parent Form Fields (unchanged)
+        <>
+          {!isLogin && (
+            <TextInput
+              style={styles.input}
+              placeholder="Full Name"
+              value={formData.name}
+              onChangeText={(text) =>
+                setFormData((prev) => ({ ...prev, name: text }))
+              }
+              autoCapitalize="words"
+            />
+          )}
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            value={formData.email}
+            onChangeText={(text) =>
+              setFormData((prev) => ({ ...prev, email: text }))
+            }
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            value={formData.password}
+            onChangeText={(text) =>
+              setFormData((prev) => ({ ...prev, password: text }))
+            }
+            secureTextEntry
+          />
+          {!isLogin && (
+            <TextInput
+              style={styles.input}
+              placeholder="Confirm Password"
+              value={formData.confirmPassword}
+              onChangeText={(text) =>
+                setFormData((prev) => ({ ...prev, confirmPassword: text }))
+              }
+              secureTextEntry
+            />
+          )}
+        </>
       )}
 
       {error && <Text style={styles.errorText}>{error}</Text>}
@@ -152,13 +364,7 @@ const AuthForms = () => {
         style={styles.switchButton}
         onPress={() => {
           setIsLogin(!isLogin);
-          setError(null);
-          setFormData({
-            name: "",
-            email: "",
-            password: "",
-            confirmPassword: "",
-          });
+          resetForm();
         }}
       >
         <Text style={styles.switchButtonText}>
@@ -231,10 +437,8 @@ export default function LoginScreen() {
         email: googleUser.email,
         profilePicture: googleUser.picture,
       };
-
-      // const serverResponse = await fetch("http://192.168.100.3:5000/api/users", {
       const serverResponse = await fetch(
-        "http://localhost:5000/api/users",
+        "http://192.168.100.3:5000/api/users",
         {
           method: "POST",
           headers: {
@@ -416,5 +620,30 @@ const styles = StyleSheet.create({
   dividerText: {
     marginHorizontal: 10,
     color: "#666",
+  },
+  userTypeToggle: {
+    flexDirection: "row",
+    backgroundColor: "#f0f0f0",
+    borderRadius: 8,
+    padding: 4,
+    marginBottom: 20,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+  },
+  toggleButtonActive: {
+    backgroundColor: "#4285F4",
+  },
+  toggleButtonText: {
+    textAlign: "center",
+    fontSize: 16,
+    color: "#666",
+  },
+  toggleButtonTextActive: {
+    color: "#fff",
+    fontWeight: "600",
   },
 });

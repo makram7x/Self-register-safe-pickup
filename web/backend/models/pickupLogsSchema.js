@@ -15,7 +15,6 @@ const pickupSchema = new Schema(
         required: true,
       },
     ],
-    // Add these new fields
     studentNames: {
       type: String,
       required: true,
@@ -38,6 +37,29 @@ const pickupSchema = new Schema(
         required: true,
       },
     },
+    // Make initiatedBy optional
+    initiatedBy: {
+      id: mongoose.Schema.Types.ObjectId,
+      name: String,
+      email: String,
+      type: {
+        type: String,
+        enum: ["parent", "driver", "staff"],
+      },
+    },
+    completedBy: {
+      id: {
+        type: mongoose.Schema.Types.ObjectId,
+      },
+      name: String,
+      email: String,
+      phone: String,
+      type: {
+        type: String,
+        enum: ["driver", "staff", "admin"], // Added "admin" to valid types
+      },
+      verificationCode: String,
+    },
     status: {
       type: String,
       enum: ["pending", "completed", "cancelled"],
@@ -55,29 +77,37 @@ const pickupSchema = new Schema(
           required: true,
         },
         updatedBy: {
-          type: String,
-          required: true,
+          id: mongoose.Schema.Types.ObjectId,
+          name: String,
+          type: {
+            type: String,
+            enum: ["parent", "driver", "staff", "admin"], // Added "admin" here too
+          },
         },
         updatedAt: {
           type: Date,
           default: Date.now,
         },
         notes: String,
+        driverInfo: {
+          id: mongoose.Schema.Types.ObjectId,
+          name: String,
+          email: String,
+          phone: String,
+          verificationCode: String,
+        },
       },
     ],
-
     completedAt: Date,
-    completedBy: String,
   },
   {
     timestamps: true,
   }
 );
 
-// Index for faster queries
 pickupSchema.index({ "parent.id": 1 });
 pickupSchema.index({ pickupCode: 1 });
-pickupSchema.index({ "student.code": 1 });
+pickupSchema.index({ "completedBy.id": 1 });
 
 const Pickup = mongoose.model("Pickup", pickupSchema);
 module.exports = Pickup;

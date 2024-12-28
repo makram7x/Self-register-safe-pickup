@@ -1,7 +1,9 @@
+// layout.jsx
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Nav from "@/components/component/Nav";
 import SearchBar from "@/components/component/SearchBar";
+import { NotificationProvider } from "@/components/component/NotificationProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -14,11 +16,10 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body key="1" className="grid min-h-screen w-full grid-cols-[280px_1fr]">
-        <Nav />
-        <main >
-          {/* <SearchBar /> */}
-          {children} {/* This is where the content of each page will go */}
-        </main>
+        <NotificationProvider>
+          <Nav />
+          <main>{children}</main>
+        </NotificationProvider>
       </body>
     </html>
   );

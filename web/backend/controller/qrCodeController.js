@@ -41,8 +41,15 @@ const generateQRCode = async (req, res) => {
 // Verify QR code
 const verifyQRCode = async (req, res) => {
   try {
-    const { code, parentId, studentId } = req.body;
+    const { code, parentId, studentId, driverId } = req.body;
+    console.log("Verifying QR code with data:", {
+      code,
+      parentId,
+      studentId,
+      driverId,
+    });
 
+    // First check if QR code is valid
     const qrCode = await QRCode.findOne({
       code,
       isActive: true,
@@ -50,24 +57,63 @@ const verifyQRCode = async (req, res) => {
     });
 
     if (!qrCode) {
+      console.log("QR code not found or expired:", code);
       return res.status(400).json({
         success: false,
         message: "Invalid or expired QR code",
       });
     }
 
-    // Record the scan
-    qrCode.scans.push({
-      parentId,
-      studentId,
-      timestamp: new Date(),
-    });
+    // If it's a driver scanning
+    if (driverId) {
+      // Get the driver to find their associated parentId
+      const driver = await Driver.findById(driverId);
+      if (!driver || !driver.active) {
+        console.log("Driver not found or inactive:", driverId);
+        return res.status(400).json({
+          success: false,
+          message: "Invalid driver credentials",
+        });
+      }
 
-    await qrCode.save();
+      // Record the scan with the driver's parent ID
+      qrCode.scans.push({
+        parentId: driver.parentId,
+        driverId: driverId,
+        timestamp: new Date(),
+      });
 
-    res.json({
-      success: true,
-      schoolId: qrCode.schoolId,
+      await qrCode.save();
+
+      return res.json({
+        success: true,
+        schoolId: qrCode.schoolId,
+        driverId: driverId,
+        parentId: driver.parentId,
+      });
+    }
+
+    // If it's a parent scanning
+    if (parentId) {
+      qrCode.scans.push({
+        parentId,
+        studentId,
+        timestamp: new Date(),
+      });
+
+      await qrCode.save();
+
+      return res.json({
+        success: true,
+        schoolId: qrCode.schoolId,
+        parentId: parentId,
+      });
+    }
+
+    // If neither driverId nor parentId provided
+    return res.status(400).json({
+      success: false,
+      message: "Missing required identification",
     });
   } catch (error) {
     console.error("Error verifying QR code:", error);

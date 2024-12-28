@@ -6,22 +6,28 @@ const getParentLinks = async (req, res) => {
   try {
     const { parentId } = req.params;
     console.log("Fetching links for parentId:", parentId);
+    console.log("ParentId type:", typeof parentId);
+
+    // Convert to string if not already
+    const parentIdString = parentId.toString();
 
     const links = await ParentStudentLink.find({
-      parentId,
+      parentId: parentIdString,
       active: true,
     });
 
-    console.log("Found links:", links); // Debug log
+    console.log(
+      `Found ${links.length} links for parent ${parentIdString}:`,
+      links
+    );
 
-    // Transform data with proper structure
     const formattedLinks = links.map((link) => ({
       code: link.studentInfo.uniqueCode,
       name: link.studentInfo.name,
       linkId: link._id.toString(),
     }));
 
-    console.log("Formatted links:", formattedLinks); // Debug log
+    console.log("Formatted links:", formattedLinks);
 
     res.status(200).json({
       success: true,
@@ -127,39 +133,43 @@ const debugLinks = async (req, res) => {
   }
 };
 
+// In parentStudentController.js
 const deleteLink = async (req, res) => {
   try {
     const { linkId } = req.params;
-    console.log("Attempting to delete link:", linkId);
+    console.log("Starting force delete for linkId:", linkId);
 
-    // First check if the link exists and is active
-    const link = await ParentStudentLink.findOne({
-      _id: linkId,
-      active: true,
-    });
+    // Force delete using deleteOne to bypass any potential middleware
+    const result = await ParentStudentLink.deleteOne({ _id: linkId });
+    console.log("Delete operation result:", result);
 
-    if (!link) {
+    if (result.deletedCount === 0) {
       return res.status(404).json({
         success: false,
-        message: "Active link not found",
+        message: "Link not found",
       });
     }
 
-    // Soft delete by marking as inactive
-    link.active = false;
-    await link.save();
+    // Verify the deletion
+    const verifyDeletion = await ParentStudentLink.findById(linkId);
+    if (verifyDeletion) {
+      console.error("Link still exists after deletion attempt");
+      throw new Error("Failed to delete link - document still exists");
+    }
 
-    console.log("Link marked as inactive:", link);
+    console.log("Link successfully deleted");
 
     res.status(200).json({
       success: true,
-      message: "Link removed successfully",
+      message: "Link permanently deleted",
+      deletionResult: result,
     });
   } catch (error) {
-    console.error("Error deleting parent-student link:", error);
+    console.error("Error in force delete:", error);
     res.status(500).json({
       success: false,
-      message: "Error removing student link",
+      message: "Error deleting student link",
+      error: error.message,
     });
   }
 };
@@ -198,24 +208,23 @@ const verifyLink = async (req, res) => {
 
 const deleteAllLinks = async (req, res) => {
   try {
-    // Use updateMany to soft delete all active links
-    const result = await ParentStudentLink.updateMany(
-      { active: true },
-      { $set: { active: false } }
-    );
+    console.log("Starting complete deletion of all parent-student links");
 
-    console.log("Deleted all parent-student links:", result);
+    // Use deleteMany to remove all documents from the collection
+    const result = await ParentStudentLink.deleteMany({});
+
+    console.log("Deletion result:", result);
 
     res.status(200).json({
       success: true,
-      message: `Deactivated ${result.modifiedCount} parent-student links`,
-      deletedCount: result.modifiedCount,
+      message: `Deleted ${result.deletedCount} parent-student links`,
+      deletedCount: result.deletedCount,
     });
   } catch (error) {
-    console.error("Error deleting all parent-student links:", error);
+    console.error("Error in deleteAllLinks:", error);
     res.status(500).json({
       success: false,
-      message: "Error deleting parent-student links",
+      message: "Error deleting all parent-student links",
       error: error.message,
     });
   }

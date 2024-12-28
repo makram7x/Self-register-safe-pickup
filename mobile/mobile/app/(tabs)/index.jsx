@@ -22,9 +22,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../../contexts/AuthContext";
 import { QrCode, PlusCircle, LogOut, User } from "lucide-react-native";
 import QRScanner from "../../components/QRscanner";
+import PickupConfirmationModal from "../../components/PickupConfirmationModal";
+import DriverManagement from "../../components/DriverManagement";
 
 export default function HomeScreen() {
-  const [hasPermission, setHasPermission] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPickupModal, setShowPickupModal] = useState(false);
@@ -36,194 +37,410 @@ export default function HomeScreen() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [isSubmittingPickup, setIsSubmittingPickup] = useState(false);
+  const [pendingPickupId, setPendingPickupId] = useState(null);
+  const [activePickup, setActivePickup] = useState(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [lastScannedCode, setLastScannedCode] = useState(null);
+  const [isAlertShowing, setIsAlertShowing] = useState(false);
+  const [isAuthLoaded, setIsAuthLoaded] = useState(false);
 
-  // Single initialization useEffect
-  useEffect(() => {
-    const initialize = async () => {
-      if (!user) {
-        console.log("No user available for initialization");
-        return;
+  const getParentId = () => {
+    const userId = getUserId();
+    return userId;
+  };
+
+  // Modify handlePickupSubmit to update activePickup state
+  const handlePickupSubmit = async () => {
+    console.log("Current user object:", JSON.stringify(user, null, 2));
+    if (selectedStudents.length === 0) {
+      Alert.alert("Error", "Please select at least one student.");
+      return;
+    }
+
+    try {
+      // Get user information
+      const userData = user.data || user;
+      const isDriverUser = userData.isDriver || userData.driver;
+
+      let pickupData = {
+        pickupCode: scannedPickupCode,
+        studentIds: selectedStudents,
+        studentInfo: linkedStudents
+          .filter((student) => selectedStudents.includes(student.linkId))
+          .map((student) => ({
+            name: student.name,
+            code: student.code,
+            linkId: student.linkId,
+          })),
+      };
+
+      if (isDriverUser) {
+        // If user is a driver, include driver ID and parent info will be fetched by backend
+        pickupData = {
+          ...pickupData,
+          driverId: userData.driver.id || userData.id,
+        };
+      } else {
+        // If user is a parent, include parent info directly
+        pickupData = {
+          ...pickupData,
+          parent: {
+            id: userData.id,
+            name: userData.name || userData.displayName,
+            email: userData.email,
+          },
+        };
       }
 
-      const userId = getUserId();
-      if (!userId) {
-        console.warn("Cannot initialize - no valid user ID");
-        return;
+      console.log("Submitting pickup data:", pickupData); // Debug log
+
+      const response = await axios.post(
+        "http://192.168.100.3:5000/api/pickup",
+        pickupData
+      );
+
+      if (response.data.success) {
+        setActivePickup(response.data.data.pickup);
+        setPendingPickupId(response.data.data.pickup._id);
+        setShowPickupModal(false);
+
+        Alert.alert(
+          "Request Sent",
+          "Your pickup request has been sent successfully!",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                setShowConfirmationModal(true);
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert("Error", response.data.message);
       }
-
-      try {
-        console.log("Requesting camera permission...");
-        const { status } = await Camera.requestCameraPermissionsAsync();
-        console.log("Camera permission status:", status);
-        setHasPermission(status === "granted");
-      } catch (error) {
-        console.error("Error requesting camera permission:", error);
-        setHasPermission(false);
-      }
-
-      try {
-        const storedStudents = await loadStoredStudents(userId);
-        setLinkedStudents(storedStudents);
-      } catch (error) {
-        console.error("Error loading students:", error);
-        Alert.alert("Error", "Failed to load student data");
-      }
-
-      setIsInitialized(true);
-    };
-
-    initialize();
-  }, [user]);
-
-  const handleBarCodeScanned = ({ type, data }) => {
-    console.log("Main component received scan:");
-    console.log("Type:", type);
-    console.log("Data:", data);
-
-    if (type === "qr" || type === "org.iso.QRCode") {
-      console.log("Valid QR code detected, processing...");
-      setScanning(false);
-      setScannedPickupCode(data);
-      setShowPickupModal(true);
-    } else {
-      console.log("Ignoring non-QR code scan");
+    } catch (error) {
+      console.error("Pickup submission error:", error.response?.data || error);
+      Alert.alert(
+        "Error",
+        error.response?.data?.message || "Failed to register pickup"
+      );
     }
   };
 
- const renderCamera = () => {
-   if (!scanning) return null;
+  // Modify submitPickupRequest to clear activePickup state
+  const submitPickupRequest = async () => {
+    setIsSubmittingPickup(true);
+    try {
+      const response = await axios.put(
+        `http://192.168.100.3:5000/api/pickup/${pendingPickupId}/status`,
+        {
+          status: "completed",
+          updatedBy: user.data?.name || user.name || "Parent",
+          notes: "Pickup confirmed by parent",
+        }
+      );
 
-   return (
-     <QRScanner
-       onBarCodeScanned={handleBarCodeScanned}
-       onCancel={() => setScanning(false)}
-     />
-   );
- };
-
-  const getUserId = () => {
-    if (!user) return null;
-    const userData = user.data || user;
-    const possibleIdFields = ["_id", "id", "uid", "userId"];
-
-    for (const field of possibleIdFields) {
-      if (userData[field]) {
-        return userData[field];
+      if (response.data.success) {
+        setActivePickup(null);
+        Alert.alert("Success", "Pickup confirmed successfully", [
+          {
+            text: "OK",
+            onPress: () => {
+              setShowConfirmationModal(false);
+              setSelectedStudents([]);
+              setScannedPickupCode(null);
+              setPendingPickupId(null);
+            },
+          },
+        ]);
+      } else {
+        Alert.alert("Error", response.data.message);
       }
+    } catch (error) {
+      console.error(
+        "Pickup confirmation error:",
+        error.response?.data || error
+      );
+      Alert.alert(
+        "Error",
+        error.response?.data?.message || "Failed to confirm pickup"
+      );
+    } finally {
+      setIsSubmittingPickup(false);
     }
-
-    return userData.email
-      ? `email_${userData.email.replace(/[^a-zA-Z0-9]/g, "_")}`
-      : null;
   };
 
-  // Updated permission request for Camera
-  const requestCameraPermission = async () => {
-    const { status } = await Camera.requestCameraPermissionsAsync();
-    setHasPermission(status === "granted");
+  // Modify handleCancelPickup to clear activePickup state
+  const handleCancelPickup = async () => {
+    try {
+      const response = await axios.put(
+        `http://192.168.100.3:5000/api/pickup/${pendingPickupId}/status`,
+        {
+          status: "cancelled",
+          updatedBy: user.data?.name || user.name || "Parent",
+          notes: "Pickup cancelled by parent",
+        }
+      );
+
+      if (response.data.success) {
+        setActivePickup(null);
+        Alert.alert("Cancelled", "Pickup request has been cancelled");
+      } else {
+        Alert.alert("Error", response.data.message);
+      }
+    } catch (error) {
+      console.error("Pickup cancellation error:", error);
+      Alert.alert("Error", "Failed to cancel pickup");
+    } finally {
+      setShowConfirmationModal(false);
+      setSelectedStudents([]);
+      setScannedPickupCode(null);
+      setPendingPickupId(null);
+    }
   };
 
-  // // Updated QR code scanning handler
-  // const handleBarCodeScanned = ({ type, data }) => {
-  //   if (type === "qr" || type === "org.iso.QRCode") {
-  //     setScanning(false);
-  //     setScannedPickupCode(data);
-  //     setShowPickupModal(true);
+  // Add new function to handle track pickup button press
+  const handleTrackPickup = () => {
+    if (activePickup) {
+      setShowConfirmationModal(true);
+    }
+  };
+
+  // Modify the button rendering in the return statement
+  // const renderActionButton = () => {
+  //   if (linkedStudents.length === 0) {
+  //     return null;
   //   }
-  // };
 
-  // Rest of your component remains the same, but update the camera view:
-  // const renderCamera = () => {
-  //   if (!scanning) return null;
+  //   if (activePickup) {
+  //     return (
+  //       <TouchableOpacity
+  //         style={[styles.actionButton, styles.trackButton]}
+  //         onPress={handleTrackPickup}
+  //       >
+  //         <Text style={styles.actionButtonText}>Track Pickup</Text>
+  //       </TouchableOpacity>
+  //     );
+  //   }
 
   //   return (
-  //     <ThemedView style={styles.cameraContainer}>
-  //       <Camera
-  //         style={StyleSheet.absoluteFillObject}
-  //         onBarCodeScanned={handleBarCodeScanned}
-  //         barCodeScannerSettings={{
-  //           barCodeTypes: ["qr"],
-  //         }}
-  //       />
-  //       <TouchableOpacity
-  //         style={styles.cancelScanButton}
-  //         onPress={() => setScanning(false)}
-  //       >
-  //         <Text style={styles.cancelScanText}>Cancel Scan</Text>
-  //       </TouchableOpacity>
-  //     </ThemedView>
+  //     <TouchableOpacity
+  //       style={[styles.actionButton, styles.scanButton]}
+  //       onPress={() => setScanning(!scanning)}
+  //     >
+  //       <Text style={styles.actionButtonText}>
+  //         {scanning ? "Cancel Scan" : "Scan QR Code"}
+  //       </Text>
+  //     </TouchableOpacity>
   //   );
   // };
 
+  // const showErrorAlert = (title, message) => {
+  //   if (isAlertShowing) return;
+
+  //   // Immediately stop scanning when showing error
+  //   setScanning(false);
+  //   setIsAlertShowing(true);
+
+  //   Alert.alert(
+  //     title,
+  //     message,
+  //     [
+  //       {
+  //         text: "OK",
+  //         onPress: () => {
+  //           // Reset all states
+  //           setIsVerifying(false);
+  //           setLastScannedCode(null);
+  //           setScannedPickupCode(null);
+  //           setIsAlertShowing(false);
+  //         },
+  //       },
+  //     ],
+  //     {
+  //       cancelable: false,
+  //     }
+  //   );
+  // };
+
+  const verifyQRCode = async (code) => {
+    try {
+      const userId = getUserId();
+      if (!userId) {
+        showErrorAlert(
+          "Error",
+          "User ID not found. Please try logging in again."
+        );
+        return { success: false };
+      }
+
+      const response = await axios.post(
+        "http://192.168.100.3:5000/api/qr-codes/verify",
+        {
+          code: code,
+          parentId: userId,
+          studentId: linkedStudents[0]?.linkId,
+        }
+      );
+
+      return {
+        success: response.data.success,
+        message: response.data.message,
+      };
+    } catch (error) {
+      console.error("QR verification error:", error);
+
+      // Immediately stop scanning on error
+      setScanning(false);
+
+      const errorMessage =
+        error.response?.data?.message || "Failed to verify QR code";
+      return {
+        success: false,
+        message: errorMessage,
+      };
+    }
+  };
+
+  const handleBarCodeScanned = async ({ type, data }) => {
+    // Prevent scanning if already processing
+    if (isVerifying || isAlertShowing) {
+      return;
+    }
+
+    console.log("QR code scanned:", type, data);
+
+    if (type === "qr" || type === "org.iso.QRCode") {
+      setIsVerifying(true);
+
+      try {
+        // Pause scanning while verifying
+        setScanning(false);
+
+        const verificationResult = await verifyQRCode(data);
+
+        if (verificationResult.success) {
+          setScannedPickupCode(data);
+          setShowPickupModal(true);
+        } else {
+          showErrorAlert("Invalid QR Code", verificationResult.message);
+        }
+      } catch (error) {
+        console.error("Error during QR verification:", error);
+        showErrorAlert("Error", "Failed to verify QR code. Please try again.");
+      } finally {
+        setIsVerifying(false);
+        // Note: Don't re-enable scanning here, let the user initiate a new scan
+      }
+    } else {
+      showErrorAlert("Invalid Code", "Please scan a valid QR code.");
+    }
+  };
+
+  // Update the renderActionButton function
+  const renderActionButton = () => {
+    if (linkedStudents.length === 0) {
+      return null;
+    }
+
+    if (activePickup) {
+      return (
+        <TouchableOpacity
+          style={[styles.actionButton, styles.trackButton]}
+          onPress={handleTrackPickup}
+        >
+          <Text style={styles.actionButtonText}>Track Pickup</Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        style={[styles.actionButton, styles.scanButton]}
+        onPress={() => {
+          // Reset all scanning-related states when starting a new scan
+          setScanning(true);
+          setIsVerifying(false);
+          setLastScannedCode(null);
+          setScannedPickupCode(null);
+          setIsAlertShowing(false);
+        }}
+      >
+        <Text style={styles.actionButtonText}>
+          {scanning ? "Cancel Scan" : "Scan QR Code"}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderCamera = () => {
+    if (!scanning) return null;
+
+    return (
+      <View style={styles.cameraContainer}>
+        <QRScanner
+          onBarCodeScanned={
+            !isVerifying && !isAlertShowing ? handleBarCodeScanned : () => {}
+          }
+          onCancel={() => {
+            // Reset all states when canceling
+            setScanning(false);
+            setIsVerifying(false);
+            setLastScannedCode(null);
+            setScannedPickupCode(null);
+            setIsAlertShowing(false);
+          }}
+        />
+        {isVerifying && (
+          <View style={styles.verifyingOverlay}>
+            <ActivityIndicator size="large" color="#ffffff" />
+            <Text style={styles.verifyingText}>Verifying QR Code...</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   // const getUserId = () => {
   //   if (!user) return null;
-
   //   const userData = user.data || user;
-  //   const possibleIdFields = ["_id", "id", "uid", "userId"];
 
+  //   // For driver users
+  //   if (userData.isDriver && userData.data?.driver?.id) {
+  //     return userData.data.driver.id;
+  //   }
+
+  //   // First try to get the ID from common fields
+  //   const possibleIdFields = ["_id", "id", "uid", "userId"];
   //   for (const field of possibleIdFields) {
   //     if (userData[field]) {
   //       return userData[field];
   //     }
   //   }
 
-  //   if (userData.email) {
-  //     return `email_${userData.email.replace(/[^a-zA-Z0-9]/g, "_")}`;
-  //   }
-
-  //   return null;
+  //   // Fallback to email-based ID
+  //   return userData.email
+  //     ? `email_${userData.email.replace(/[^a-zA-Z0-9]/g, "_")}`
+  //     : null;
   // };
 
-  // Single initialization useEffect
+  // const showAlert = (title, message) => {
+  //   if (Platform.OS === "web") {
+  //     alert(`${title}\n\n${message}`);
+  //   } else {
+  //     Alert.alert(title, message);
+  //   }
+  // };
+
   useEffect(() => {
-    const initialize = async () => {
-      if (!user) {
-        console.log("No user available for initialization");
-        return;
-      }
-
-      const userId = getUserId();
-      if (!userId) {
-        console.warn("Cannot initialize - no valid user ID");
-        return;
-      }
-
-      // Initialize camera permission
-      await requestCameraPermission();
-
-      // Load students from database
-      try {
-        const storedStudents = await loadStoredStudents(userId);
-        setLinkedStudents(storedStudents);
-      } catch (error) {
-        console.error("Error loading students:", error);
-        Alert.alert("Error", "Failed to load student data");
-      }
-
-      setIsInitialized(true);
-    };
+    console.log("Current user data:", user);
+    console.log("Is parent user?", isParentUser());
 
     initialize();
   }, [user]);
-
-  // const requestCameraPermission = async () => {
-  //   const { status } = await BarCodeScanner.requestPermissionsAsync();
-  //   setHasPermission(status === "granted");
-  // };
-
-  // const handleBarCodeScanned = ({ type, data }) => {
-  //   setScanning(false);
-  //   setScannedPickupCode(data);
-  //   setShowPickupModal(true);
-  // };
-
-  const showAlert = (title, message) => {
-    if (Platform.OS === "web") {
-      alert(`${title}\n\n${message}`);
-    } else {
-      Alert.alert(title, message);
-    }
-  };
 
   const verifyAndAddStudent = async () => {
     const userId = getUserId();
@@ -291,108 +508,279 @@ export default function HomeScreen() {
     }
   };
 
+  const getUserId = () => {
+    if (!user) {
+      console.log("No user object found");
+      return null;
+    }
+
+    console.log("Getting ID for user:", JSON.stringify(user, null, 2));
+
+    // For driver users
+    if (user.isDriver || user.driver || user.data?.driver) {
+      const driverData = user.driver || user.data?.driver;
+      if (driverData?.id) {
+        console.log("Using driver ID:", driverData.id);
+        return driverData.id;
+      }
+    }
+
+    // For direct access to id
+    if (user.data?.id) {
+      console.log("Using user.data.id:", user.data.id);
+      return user.data.id;
+    }
+
+    if (user.id) {
+      console.log("Using user.id:", user.id);
+      return user.id;
+    }
+
+    // Log full user structure if no ID found
+    console.error("No ID found in user object:", JSON.stringify(user, null, 2));
+    return null;
+  };
+
+  // Modified loadStoredStudents function
   const loadStoredStudents = async (userId) => {
     try {
-      // Updated to match the getParentLinks route
+      if (!user) {
+        console.log("No user data available");
+        return [];
+      }
+
+      console.log(
+        "Loading students with user data:",
+        JSON.stringify(user, null, 2)
+      );
+
+      // For driver users, use parentId directly from driver data
+      if (user.isDriver || user.driver || user.data?.driver) {
+        const driverData = user.driver || user.data?.driver;
+        const parentId = driverData?.parentId;
+
+        if (!parentId) {
+          console.error("No parentId found in driver data");
+          return [];
+        }
+
+        console.log("Using parentId from driver data:", parentId);
+
+        // Fetch student links directly using parentId
+        const response = await axios.get(
+          `http://192.168.100.3:5000/api/parent-student-links/${parentId}`
+        );
+
+        console.log("Parent-student links response:", response.data);
+
+        if (response.data.success) {
+          return response.data.data;
+        }
+        return [];
+      }
+
+      // For parent users, use their own ID
       const response = await axios.get(
         `http://192.168.100.3:5000/api/parent-student-links/${userId}`
       );
+
       if (response.data.success) {
         return response.data.data;
       }
+
       return [];
     } catch (error) {
-      console.error("Error loading students:", error);
+      console.error("Error in loadStoredStudents:", error);
+      if (error.response) {
+        console.error("API error response:", error.response.data);
+      }
       return [];
     }
   };
 
-  const removeStudent = async (linkId) => {
+  // Modified initialize function
+  const initialize = async () => {
     try {
-      // This path is correct as is
+      console.log("Starting initialization...");
+      if (!user) {
+        console.log("No user data available for initialization");
+        setIsInitialized(true);
+        return;
+      }
+
+      // For driver users, use parentId directly
+      if (user.isDriver || user.driver || user.data?.driver) {
+        const driverData = user.driver || user.data?.driver;
+        if (driverData?.parentId) {
+          console.log(
+            "Loading students for driver with parentId:",
+            driverData.parentId
+          );
+          const students = await loadStoredStudents();
+          console.log("Loaded students for driver:", students);
+          setLinkedStudents(students);
+        }
+      } else {
+        // For parent users
+        const userId = getUserId();
+        if (userId) {
+          console.log("Loading students for parent with userId:", userId);
+          const students = await loadStoredStudents(userId);
+          console.log("Loaded students for parent:", students);
+          setLinkedStudents(students);
+        }
+      }
+
+      setIsInitialized(true);
+    } catch (error) {
+      console.error("Initialization error:", error);
+      setIsInitialized(true);
+    }
+  };
+
+  // Update initialize function
+  // In your HomeScreen.js
+  // In HomeScreen.js
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        if (user) {
+          console.log("Auth loaded with user data:", user);
+          setIsAuthLoaded(true);
+        }
+      } catch (error) {
+        console.error("Error checking auth:", error);
+      }
+    };
+
+    checkAuth();
+  }, [user]);
+
+  // Separate useEffect for initialization
+  useEffect(() => {
+    if (isAuthLoaded && user) {
+      console.log("Starting initialization with user:", user);
+      initialize();
+    }
+  }, [isAuthLoaded, user]);
+
+  // Update loadStoredStudents to handle the correct data structure
+  // const loadStoredStudents = async (userId) => {
+  //   try {
+  //     const userData = user.data || user;
+  //     console.log("Loading students for user data:", userData);
+
+  //     let parentId;
+  //     if (userData.driver) {
+  //       // For drivers, get the parent ID from the driver data
+  //       const driverResponse = await axios.get(
+  //         `http://192.168.100.3:5000/api/drivers/single/${userData.driver.id}`
+  //       );
+
+  //       if (!driverResponse.data.success) {
+  //         console.error("Failed to get driver details");
+  //         return [];
+  //       }
+
+  //       parentId = driverResponse.data.data.parentId;
+  //     } else {
+  //       // For parents, use their own ID
+  //       parentId = userId;
+  //     }
+
+  //     if (!parentId) {
+  //       console.error("No valid parent ID found");
+  //       return [];
+  //     }
+
+  //     const response = await axios.get(
+  //       `http://192.168.100.3:5000/api/parent-student-links/${parentId}`
+  //     );
+
+  //     if (response.data.success) {
+  //       return response.data.data;
+  //     }
+  //     return [];
+  //   } catch (error) {
+  //     console.error("Error loading students:", error);
+  //     return [];
+  //   }
+  // };
+
+  // Update isParentUser to match the actual data structure
+  const isParentUser = () => {
+    if (!user) {
+      console.log("No user found in isParentUser check");
+      return false;
+    }
+
+    const userData = user.data || user;
+    console.log("Checking user type with data:", userData);
+
+    // Check specifically for the driver property
+    if (userData.driver) {
+      console.log("User identified as driver");
+      return false;
+    }
+
+    console.log("User identified as parent");
+    return true;
+  };
+
+  const removeStudent = async (linkId) => {
+    // First confirm with the user
+    const confirmDelete = () => {
+      return new Promise((resolve) => {
+        Alert.alert(
+          "Remove Student",
+          "Are you sure you want to remove this student? This action cannot be undone.",
+          [
+            {
+              text: "Cancel",
+              style: "cancel",
+              onPress: () => resolve(false),
+            },
+            {
+              text: "Remove",
+              style: "destructive",
+              onPress: () => resolve(true),
+            },
+          ]
+        );
+      });
+    };
+
+    const shouldDelete = await confirmDelete();
+    if (!shouldDelete) return;
+
+    try {
+      // Show loading state
+      
+
       const response = await axios.delete(
         `http://192.168.100.3:5000/api/parent-student-links/${linkId}`
       );
 
       if (response.data.success) {
+        // Update local state
         setLinkedStudents((prevStudents) =>
           prevStudents.filter((student) => student.linkId !== linkId)
         );
+
+        // Show success message
+        Alert.alert("Success", "Student has been removed successfully");
+      } else {
+        throw new Error(response.data.message || "Failed to remove student");
       }
     } catch (error) {
       console.error("Error removing student:", error);
-      Alert.alert("Error", "Failed to remove student link");
-    }
-  };
 
-  const handlePickupSubmit = async () => {
-    if (selectedStudents.length === 0) {
-      Alert.alert("Error", "Please select at least one student.");
-      return;
-    }
-
-    try {
-      // Get the user ID and info
-      const userId = getUserId();
-      if (!userId) {
-        Alert.alert("Error", "User ID not found. Please try logging in again.");
-        return;
-      }
-
-      // Get user info from the useAuth hook
-      const userInfo = user.data || user;
-      const parentName =
-        userInfo.name || userInfo.displayName || "Unknown Parent";
-      const parentEmail = userInfo.email || "N/A";
-
-      // Get selected students' info
-      const selectedStudentsInfo = linkedStudents
-        .filter((student) => selectedStudents.includes(student.linkId))
-        .map((student) => ({
-          name: student.name,
-          code: student.code,
-          linkId: student.linkId,
-        }));
-
-      // Create the pickup request
-      const pickupData = {
-        pickupCode: scannedPickupCode,
-        studentIds: selectedStudents, // Keep the original IDs for DB relations
-        // Add these new fields to match our web UI needs
-        studentInfo: selectedStudentsInfo,
-        parent: {
-          id: userId,
-          name: parentName,
-          email: parentEmail,
-        },
-      };
-
-      console.log("Sending pickup data:", pickupData); // Debug log
-
-      const response = await axios.post(
-        "http://192.168.100.3:5000/api/pickup",
-        pickupData
-      );
-
-      if (response.data.success) {
-        Alert.alert("Success", response.data.message, [
-          {
-            text: "OK",
-            onPress: () => {
-              setShowPickupModal(false);
-              setSelectedStudents([]);
-              setScannedPickupCode(null);
-            },
-          },
-        ]);
-      } else {
-        Alert.alert("Error", response.data.message);
-      }
-    } catch (error) {
-      console.error("Pickup submission error:", error.response?.data || error);
+      // Show specific error message if available
       Alert.alert(
         "Error",
-        error.response?.data?.message || "Failed to register pickup"
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to remove student. Please try again later."
       );
     }
   };
@@ -493,7 +881,7 @@ export default function HomeScreen() {
       >
         <Text style={styles.studentName}>
           {student.name || "No name available"}
-          {__DEV__ && ` (${student.code})`} {/* Show code in development */}
+          {/* {__DEV__ && ` (${student.code})`} Show code in development */}
         </Text>
         <TouchableOpacity
           onPress={() => removeStudent(student.linkId)}
@@ -509,9 +897,20 @@ export default function HomeScreen() {
     const getUserInfo = () => {
       if (!user) return { name: "User", email: "" };
 
-      // Handle both Google auth and manual login data structures
-      const userData = user.data || user;
+      console.log("Getting user info from:", JSON.stringify(user, null, 2));
 
+      // For driver users - based on the actual data structure we see in logs
+      if (user.data?.driver) {
+        console.log("Found driver data in user.data.driver");
+        return {
+          name: user.data.driver.name || "Driver",
+          email: user.data.driver.email || "",
+          profilePicture: null,
+        };
+      }
+
+      // For parent users and fallback
+      const userData = user.data || user;
       return {
         name: userData.name || userData.displayName || "User",
         email: userData.email || "",
@@ -522,6 +921,7 @@ export default function HomeScreen() {
     if (!showDropdown) return null;
 
     const userInfo = getUserInfo();
+    console.log("User info for dropdown:", userInfo);
 
     return (
       <View style={styles.dropdownMenu}>
@@ -560,13 +960,6 @@ export default function HomeScreen() {
     );
   };
 
-  if (hasPermission === null) {
-    return <Text>Requesting camera permission</Text>;
-  }
-  if (hasPermission === false) {
-    return <Text>No access to camera</Text>;
-  }
-
   return (
     <ThemedView style={styles.container}>
       <TouchableWithoutFeedback onPress={handleGlobalPress}>
@@ -593,71 +986,130 @@ export default function HomeScreen() {
               )}
             </TouchableOpacity>
           </View>
+          <View>
+            <Text style={styles.userTypeText}>
+              {isParentUser() ? "Parent Account" : "Driver Account"}
+            </Text>
+          </View>
 
           <ProfileDropdown />
 
-          {/* Students List */}
-          <ScrollView style={styles.studentsList}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Linked Students</Text>
-            </View>
+          <ScrollView
+            style={styles.mainScrollView}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollViewContent}
+          >
+            {isParentUser() ? (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Linked Students</Text>
+                </View>
 
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => setShowAddModal(true)}
-            >
-              <PlusCircle size={20} color="#4CAF50" />
-              <Text style={styles.addButtonText}>Add Student</Text>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={() => setShowAddModal(true)}
+                >
+                  <PlusCircle size={20} color="#4CAF50" />
+                  <Text style={styles.addButtonText}>Add Student</Text>
+                </TouchableOpacity>
 
-            {linkedStudents.map((student, index) =>
-              renderStudentItem(student, index)
+                <View style={styles.studentsContainer}>
+                  {linkedStudents.map((student, index) =>
+                    renderStudentItem(student, index)
+                  )}
+                </View>
+
+                {isAuthLoaded && user && getUserId() && (
+                  <View style={styles.driverManagementSection}>
+                    <DriverManagement parentId={getUserId()} />
+                  </View>
+                )}
+              </>
+            ) : (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Assigned Students</Text>
+                </View>
+                {linkedStudents.length > 0 ? (
+                  <View style={styles.studentsContainer}>
+                    {linkedStudents.map((student, index) => (
+                      <View
+                        key={`student-${student.linkId}-${index}`}
+                        style={[styles.studentItem, styles.driverStudentItem]}
+                      >
+                        <View style={styles.studentInfo}>
+                          <Text style={styles.studentName}>
+                            {student.name || "No name available"}
+                          </Text>
+                          <Text style={styles.studentCode}>
+                            Code: {student.code}
+                          </Text>
+                        </View>
+                        <View style={styles.studentStatus}>
+                          <Text style={styles.statusText}>Active</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.emptyStateContainer}>
+                    <Text style={styles.emptyStateText}>
+                      No students assigned yet
+                    </Text>
+                    <Text style={styles.emptyStateSubtext}>
+                      Students will appear here once they are assigned to you
+                    </Text>
+                  </View>
+                )}
+              </View>
             )}
           </ScrollView>
 
           {/* Camera Button and Scanner */}
-          <Button
-            title={scanning ? "Cancel Scan" : "Scan QR Code"}
-            onPress={() => setScanning(!scanning)}
-            disabled={linkedStudents.length === 0}
-          />
+          {renderActionButton()}
 
           {renderCamera()}
-
-          <Modal
-            animationType="fade"
-            transparent={true}
-            visible={showAddModal}
-            onRequestClose={() => setShowAddModal(false)}
-          >
-            <TouchableWithoutFeedback onPress={() => setShowAddModal(false)}>
-              <ThemedView style={styles.centeredView}>
-                <TouchableWithoutFeedback>
-                  <ThemedView style={styles.modalView}>
-                    <Text style={styles.modalText}>
-                      Enter Student Unique Code
-                    </Text>
-                    <TextInput
-                      style={styles.input}
-                      onChangeText={setStudentCode}
-                      value={studentCode}
-                      placeholder="Enter code here"
-                      placeholderTextColor="#888"
-                      keyboardType="default"
-                      autoCapitalize="characters"
-                    />
-                    <TouchableOpacity
-                      style={styles.submitButton}
-                      onPress={verifyAndAddStudent}
-                    >
-                      <Text style={styles.submitButtonText}>Add Student</Text>
-                    </TouchableOpacity>
+          {isParentUser() && (
+            <>
+              <Modal
+                animationType="fade"
+                transparent={true}
+                visible={showAddModal}
+                onRequestClose={() => setShowAddModal(false)}
+              >
+                <TouchableWithoutFeedback
+                  onPress={() => setShowAddModal(false)}
+                >
+                  <ThemedView style={styles.centeredView}>
+                    <TouchableWithoutFeedback>
+                      <ThemedView style={styles.modalView}>
+                        <Text style={styles.modalText}>
+                          Enter Student Unique Code
+                        </Text>
+                        <TextInput
+                          style={styles.input}
+                          onChangeText={setStudentCode}
+                          value={studentCode}
+                          placeholder="Enter code here"
+                          placeholderTextColor="#888"
+                          keyboardType="default"
+                          autoCapitalize="characters"
+                        />
+                        <TouchableOpacity
+                          style={styles.submitButton}
+                          onPress={verifyAndAddStudent}
+                        >
+                          <Text style={styles.submitButtonText}>
+                            Add Student
+                          </Text>
+                        </TouchableOpacity>
+                      </ThemedView>
+                    </TouchableWithoutFeedback>
                   </ThemedView>
                 </TouchableWithoutFeedback>
-              </ThemedView>
-            </TouchableWithoutFeedback>
-          </Modal>
-
+              </Modal>
+            </>
+          )}
           <Modal
             animationType="fade"
             transparent={true}
@@ -692,6 +1144,16 @@ export default function HomeScreen() {
               </ThemedView>
             </TouchableWithoutFeedback>
           </Modal>
+          <PickupConfirmationModal
+            isOpen={showConfirmationModal}
+            onClose={() => setShowConfirmationModal(false)}
+            onConfirm={submitPickupRequest}
+            onCancel={handleCancelPickup}
+            selectedStudents={linkedStudents.filter((student) =>
+              selectedStudents.includes(student.linkId)
+            )}
+            isSubmitting={isSubmittingPickup}
+          />
         </View>
       </TouchableWithoutFeedback>
     </ThemedView>
@@ -699,9 +1161,81 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  studentsList: {
+  mainScrollView: {
+    flex: 1,
+  },
+
+  scrollViewContent: {
+    flexGrow: 1,
+    paddingBottom: 20,
+  },
+
+  studentsContainer: {
     flex: 1,
     marginBottom: 20,
+  },
+
+  driverManagementSection: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
+  },
+
+  contentContainer: {
+    flex: 1,
+    paddingBottom: Platform.OS === "ios" ? 40 : 20,
+  },
+  driverStudentItem: {
+    backgroundColor: "#f8f9fa",
+    borderWidth: 1,
+    borderColor: "#e9ecef",
+    padding: 15,
+    marginBottom: 10,
+    borderRadius: 8,
+  },
+
+  studentInfo: {
+    flex: 1,
+  },
+
+  studentCode: {
+    fontSize: 14,
+    color: "#6c757d",
+    marginTop: 4,
+  },
+
+  studentStatus: {
+    backgroundColor: "#e8f5e9",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+
+  statusText: {
+    color: "#2e7d32",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
+  emptyStateContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+    marginTop: 40,
+  },
+
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#495057",
+    marginBottom: 8,
+  },
+
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: "#6c757d",
+    textAlign: "center",
   },
 
   sectionHeader: {
@@ -709,12 +1243,50 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 15,
+    paddingHorizontal: 4,
   },
-
-  sectionTitle: {
-    fontSize: 18,
+  verifyingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  verifyingText: {
+    color: "#ffffff",
+    marginTop: 10,
+    fontSize: 16,
     fontWeight: "600",
   },
+  actionButton: {
+    padding: 15,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  scanButton: {
+    backgroundColor: "#4CAF50",
+  },
+  trackButton: {
+    backgroundColor: "#2196F3",
+  },
+  actionButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  studentsList: {
+    flex: 1,
+    marginBottom: 20,
+  },
+
+  // sectionTitle: {
+  //   fontSize: 18,
+  //   fontWeight: "600",
+  // },
 
   addButton: {
     flexDirection: "row",
@@ -738,10 +1310,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#4CAF50",
     fontWeight: "500",
-  },
-
-  contentContainer: {
-    flex: 1,
   },
 
   studentItem: {
@@ -1061,5 +1629,21 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: "white",
     fontSize: 16,
+  },
+  userTypeText: {
+    fontSize: 14,
+    color: "green",
+    marginBottom: 5,
+  },
+  studentDetails: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 4,
+  },
+  noStudentsText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    marginTop: 20,
   },
 });

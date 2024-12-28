@@ -1,3 +1,5 @@
+// In parentStudentLink.js
+
 const mongoose = require("mongoose");
 
 const parentStudentLinkSchema = new mongoose.Schema(
@@ -16,22 +18,19 @@ const parentStudentLinkSchema = new mongoose.Schema(
         required: [true, "Student name is required"],
       },
     },
-    active: {
-      type: Boolean,
-      default: true,
-    },
+    // Remove the active field completely since we're using true deletion
   },
   {
     timestamps: true,
   }
 );
 
-// Clear existing model if it exists
+// Clear existing model and middleware if exists
 if (mongoose.models.ParentStudentLink) {
   delete mongoose.models.ParentStudentLink;
 }
 
-// Add the new index structure
+// Add the index without any middleware that might interfere with deletion
 parentStudentLinkSchema.index(
   {
     parentId: 1,

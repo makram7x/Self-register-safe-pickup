@@ -67,6 +67,19 @@ export default function TabLayout() {
           tabBarBadge: unreadCount > 0 ? unreadCount : null,
         }}
       />
+      <Tabs.Screen
+        name="Driver"
+        options={{
+          title: "Driver",
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon
+              name={focused ? "code-slash" : "code-slash-outline"}
+              color={color}
+            />
+          ),
+          tabBarBadge: unreadCount > 0 ? unreadCount : null,
+        }}
+      />
     </Tabs>
   );
 }

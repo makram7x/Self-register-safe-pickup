@@ -26,6 +26,7 @@ const qrCodeSchema = new mongoose.Schema({
     {
       parentId: String,
       studentId: String,
+      driverId: String,
       timestamp: Date,
     },
   ],

@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Modal, Spin, notification, Drawer } from "antd";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,81 +38,130 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import QRCodeGenerator from "@/components/component/QrGeneration";
-// import WeatherWidget from "@/components/component/DynamicWeatherWidget";
+import WeatherWidget from "@/components/component/DynamicWeatherWidget";
+import RealtimePickupDrawer from "@/components/component/RealTimePickupDrawer";
+import io from "socket.io-client";
 
 export default function Dashboard() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [studentCount, setStudentCount] = useState(0);
   const [parentCount, setParentCount] = useState(0);
-  const [recentPickups, setRecentPickups] = useState([]);
-  const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] =
-    useState(false);
+  const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] = useState(
+    searchParams.get("drawer") === "true"
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedPickup, setSelectedPickup] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [actionType, setActionType] = useState(null);
+  const [pendingPickups, setPendingPickups] = useState([]);
+  const [socket, setSocket] = useState(null);
+  const [bgColor, setBgColor] = useState("white");
 
-  // Notification config
-  const [api, contextHolder] = notification.useNotification();
+  
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-  // Weather widget with dark mode support
-  const WeatherWidget = () => {
-    return (
-      <div className="flex items-center space-x-2 bg-blue-950/20 p-3 rounded-lg">
-        <div className="text-blue-400">
-          <Cloud className="h-8 w-8" />
-        </div>
-        <div>
-          <div className="text-sm font-medium text-blue-100">72°F</div>
-          <div className="text-xs text-blue-300">Partly Cloudy</div>
-        </div>
-      </div>
-    );
+    const updateBgColor = (isDark) => {
+      setBgColor(isDark ? "#0f172a" : "white");
+    };
+
+    // Set initial color
+    updateBgColor(mediaQuery.matches);
+
+    // Listen for theme changes
+    const handleChange = (e) => updateBgColor(e.matches);
+    mediaQuery.addEventListener("change", handleChange);
+
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  const handleDrawerClose = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("drawer");
+    router.replace(url.pathname + url.search);
+    setIsNotificationDrawerOpen(false);
   };
 
+  const handleDrawerOpen = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("drawer", "true");
+    router.replace(url.pathname + url.search);
+    setIsNotificationDrawerOpen(true);
+  };
+
+  // Update the drawer state when URL parameters change
+  useEffect(() => {
+    setIsNotificationDrawerOpen(searchParams.get("drawer") === "true");
+  }, [searchParams]);
+
+  // Update the button click handler
+  const handleBellClick = () => {
+    handleDrawerOpen();
+  };
+
+  // Initialize Socket connection
+  useEffect(() => {
+    const newSocket = io("http://localhost:5000");
+    setSocket(newSocket);
+
+    return () => newSocket.disconnect();
+  }, []);
+
+  // Fetch initial pending pickups
   const fetchPendingPickups = async () => {
     try {
-      setIsLoading(true);
       const response = await axios.get("http://localhost:5000/api/pickup/logs");
-
       if (response.data.success) {
-        const pendingPickups = response.data.data
-          .filter((pickup) => pickup.status === "pending")
-          .map((pickup) => ({
-            id: pickup._id,
-            studentName: pickup.studentNames,
-            studentCode: pickup.studentCodes,
-            parentName: pickup.parent.name,
-            parentEmail: pickup.parent.email,
-            pickupTime: new Date(pickup.pickupTime).toLocaleString(),
-            status: pickup.status,
-          }));
-
-        setRecentPickups(pendingPickups);
+        const pending = response.data.data.filter(
+          (pickup) => pickup.status === "pending"
+        );
+        setPendingPickups(pending);
       }
     } catch (error) {
       console.error("Error fetching pending pickups:", error);
-      notification.error({
-        message: "Error",
-        description: "Failed to fetch pending pickups",
-      });
-    } finally {
-      setIsLoading(false);
     }
   };
 
+  // Initial fetch and socket listeners
   useEffect(() => {
-    if (isNotificationDrawerOpen) {
-      fetchPendingPickups();
-    }
-  }, [isNotificationDrawerOpen]);
+    fetchPendingPickups();
 
-  // Confirmation modal for actions
-  const showActionConfirmation = (pickup, type) => {
-    setSelectedPickup(pickup);
-    setActionType(type);
-    setShowConfirmModal(true);
-  };
+    if (socket) {
+      // Listen for new pickups
+      socket.on("new-pickup", (pickup) => {
+        if (pickup.status === "pending") {
+          setPendingPickups((prev) => [...prev, pickup]);
+          // showPickupNotification(pickup);
+        }
+      });
+
+      // Listen for pickup status updates
+      socket.on("pickup-status-updated", ({ pickupId, status }) => {
+        setPendingPickups((prev) => {
+          if (status !== "pending") {
+            return prev.filter((p) => p._id !== pickupId);
+          }
+          return prev;
+        });
+      });
+
+      // Listen for deleted pickups
+      socket.on("pickup-deleted", (pickupId) => {
+        setPendingPickups((prev) => prev.filter((p) => p._id !== pickupId));
+      });
+    }
+
+    return () => {
+      if (socket) {
+        socket.off("new-pickup");
+        socket.off("pickup-status-updated");
+        socket.off("pickup-deleted");
+      }
+    };
+  }, [socket]);
 
   // Handle pickup status update
   const handlePickupStatus = async () => {
@@ -183,106 +233,6 @@ export default function Dashboard() {
     </Modal>
   );
 
-  // Updated NotificationDrawerContent component
-  const NotificationDrawerContent = () => (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-lg font-semibold text-white">Pending Pickups</h2>
-          <p className="text-sm text-blue-300">
-            {recentPickups.length} pending requests
-          </p>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsNotificationDrawerOpen(false)}
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-        </div>
-      ) : recentPickups.length === 0 ? (
-        <div className="text-center py-8 text-gray-400">No pending pickups</div>
-      ) : (
-        recentPickups.map((pickup) => (
-          <div
-            key={pickup.id}
-            className="bg-blue-950/30 p-4 rounded-lg space-y-2 border border-blue-900/50"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="font-medium text-blue-100">
-                  {pickup.studentName}
-                </h3>
-                <p className="text-sm text-blue-300">
-                  Code: {pickup.studentCode}
-                </p>
-                <p className="text-sm text-blue-300">
-                  Parent: {pickup.parentName}
-                </p>
-                <p className="text-xs text-blue-400">
-                  Requested: {pickup.pickupTime}
-                </p>
-              </div>
-              <span className="text-xs bg-yellow-500/20 text-yellow-300 px-2 py-1 rounded-full">
-                Pending
-              </span>
-            </div>
-            <div className="flex space-x-2 mt-2">
-              <Button
-                size="sm"
-                className="bg-green-600 hover:bg-green-700"
-                onClick={() => showActionConfirmation(pickup, "completed")}
-              >
-                Complete
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-red-500 text-red-500 hover:bg-red-950/20"
-                onClick={() => showActionConfirmation(pickup, "cancelled")}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  );
-
-  const showPickupNotification = (pickup) => {
-    api.info({
-      message: "New Pending Pickup",
-      description: (
-        <div>
-          <p>
-            <strong>Student:</strong> {pickup.studentName}
-          </p>
-          <p>
-            <strong>Grade:</strong> {pickup.grade}
-          </p>
-          <p>
-            <strong>Parent:</strong> {pickup.parentName}
-          </p>
-        </div>
-      ),
-      placement: "topRight",
-      duration: 5,
-      style: {
-        backgroundColor: "#0f172a",
-        border: "1px solid #1e3a8a",
-        color: "#e2e8f0",
-      },
-      icon: <AlertTriangle className="h-5 w-5 text-yellow-500" />,
-    });
-  };
-
   useEffect(() => {
     const fetchStudentCount = async () => {
       try {
@@ -313,14 +263,13 @@ export default function Dashboard() {
     fetchParentCount();
   }, []);
   return (
-    <div className="relative flex h-screen overflow-hidden bg-[#020817]">
-      {/* Main content area with scrolling */}
+    <div className="relative flex h-screen overflow-hidden bg-grey-900">
       <div className="flex-1 overflow-y-auto">
-        {/* Header section - fixed at top */}
-        <div className="bg-[#0f172a] p-4 shadow-lg border-b border-blue-900/20">
+        {/* Header section */}
+        <div className="bg-grey-900 p-4 shadow-lg">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <h1 className="text-2xl font-bold text-white">
+              <h1 className="text-2xl font-bold text-black dark:text-white">
                 School Dashboard
               </h1>
               <WeatherWidget />
@@ -328,19 +277,23 @@ export default function Dashboard() {
             <div className="flex items-center space-x-2">
               <Button
                 variant="outline"
-                className="flex items-center border-blue-900 text-blue-100 hover:bg-blue-900/20"
+                className="flex items-center border-grey-900 text-grey-100 hover:bg-grey-900/20"
               >
                 <Calendar className="mr-2 h-4 w-4" />
                 {new Date().toLocaleDateString()}
               </Button>
               <Button
                 variant="outline"
-                className="flex items-center border-blue-900 text-blue-100 hover:bg-blue-900/20"
-                onClick={() => setIsNotificationDrawerOpen(true)}
+                className="flex items-center border-grey-900 text-grey-100 hover:bg-grey-900/20"
+                onClick={handleBellClick}
               >
                 <Bell className="mr-2 h-4 w-4" />
-                <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                  {recentPickups.length}
+                <span
+                  className={`bg-red-500 text-white text-xs px-2 py-0.5 rounded-full ${
+                    pendingPickups.length === 0 ? "hidden" : ""
+                  }`}
+                >
+                  {pendingPickups.length}
                 </span>
               </Button>
             </div>
@@ -350,9 +303,9 @@ export default function Dashboard() {
         {/* Scrollable content */}
         <div className="p-4 md:p-6">
           {/* Activity Timeline Card */}
-          <Card className="bg-[#0f172a] border-blue-900/20 mb-6">
+          <Card className="bg-gray-300 border-grey-900/20 mb-6">
             <CardHeader>
-              <CardTitle className="text-lg text-white">
+              <CardTitle className="text-lg text-black dark:text-white">
                 Today's Activity
               </CardTitle>
             </CardHeader>
@@ -378,7 +331,7 @@ export default function Dashboard() {
                     value: "45",
                     trend: "+12",
                     icon: <CheckIcon className="h-4 w-4" />,
-                    color: "text-blue-500",
+                    color: "text-grey-500",
                   },
                   {
                     label: "Cancelled",
@@ -413,11 +366,11 @@ export default function Dashboard() {
           </div>
 
           {/* Info Cards Grid */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 mb-[3rem] mt-[3rem]">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                 <CardTitle className="text-sm font-medium">
-                  Pending Pickups
+                  Total number of students
                 </CardTitle>
                 <ClockIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               </CardHeader>
@@ -431,7 +384,7 @@ export default function Dashboard() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                 <CardTitle className="text-sm font-medium">
-                  Completed Pickups
+                  Total number of Guardians
                 </CardTitle>
                 <CheckIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               </CardHeader>
@@ -608,48 +561,37 @@ export default function Dashboard() {
       </div>
 
       {/* Notification Drawer */}
-      <Drawer
-        title={null}
-        placement="right"
-        onClose={() => setIsNotificationDrawerOpen(false)}
-        open={isNotificationDrawerOpen}
-        width={400}
-        className="bg-white dark:bg-gray-800"
-        styles={{
-          body: {
-            padding: "24px",
-            backgroundColor: "transparent",
-          },
-          mask: {
-            backgroundColor: "rgba(0, 0, 0, 0.7)",
-          },
-        }}
-      >
-        <NotificationDrawerContent />
-      </Drawer>
+      <div className="bg-white dark:bg-gray-800 h-full">
+        <Drawer
+          title={null}
+          placement="right"
+          onClose={handleDrawerClose}
+          open={isNotificationDrawerOpen}
+          width={400}
+          drawerStyle={{
+            backgroundColor: bgColor
+          }}
+          styles={{
+            body: {
+              padding: "24px",
+            },
+            mask: {
+              backgroundColor: "rgba(0, 0, 0, 0.7)",
+            },
+          }}
+        >
+          {/* <div className="bg-white dark:bg-gray-800 h-full"> */}
+            <RealtimePickupDrawer
+              isOpen={isNotificationDrawerOpen}
+              // onClose={handleDrawerClose}
+              onPickupsUpdate={(pickups) => setPendingPickups(pickups)}
+              socket={socket}
+            />
+          {/* </div> */}
+        </Drawer>
+      </div>
+      <StatusConfirmationModal />
     </div>
-  );
-}
-
-function CarIcon(props) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" />
-      <circle cx="7" cy="17" r="2" />
-      <path d="M9 17h6" />
-      <circle cx="17" cy="17" r="2" />
-    </svg>
   );
 }
 

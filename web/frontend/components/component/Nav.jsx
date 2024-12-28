@@ -15,8 +15,8 @@ function Nav() {
 
   const navItems = [
     { href: "/", icon: LayoutDashboardIcon, label: "Dashboard" },
-    { href: "/student", icon: UsersIcon, label: "Students" },
-    { href: "/pickup", icon: CarIcon, label: "Pick-up" },
+    { href: "/student", icon: UsersIcon, label: "Students Management" },
+    { href: "/pickup", icon: CarIcon, label: "Pick-up Logs" },
     { href: "/notifications", icon: MegaphoneIcon, label: "Announcements" },
   ];
 

@@ -82,15 +82,15 @@ const WeatherWidget = () => {
   }
 
   return weather ? (
-    <div className="flex items-center space-x-2 bg-blue-950/20 p-3 rounded-lg">
-      <div className="text-blue-400">
+    <div className="flex items-center space-x-2 bg-grey-550/20 p-3 rounded-lg ">
+      <div className="text-blue-600 dark:text-blue-300">
         {getWeatherIcon(weather.weather[0].id)}
       </div>
       <div>
-        <div className="text-sm font-medium text-blue-100">
+        <div className="text-sm font-medium text-blue-600 dark:text-blue-100">
           {Math.round(weather.main.temp)}°C
         </div>
-        <div className="text-xs text-blue-300">
+        <div className="text-xs dark:text-blue-300 text-blue-700">
           {weather.weather[0].description}
         </div>
       </div>

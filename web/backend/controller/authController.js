@@ -31,19 +31,20 @@ const register = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create new user
+    // Create new user with explicit null values for Google-specific fields
     const user = new User({
       name,
       email,
       password: hashedPassword,
       authType: "email",
-      profilePicture: null,
+      googleId: null, // Explicitly set to null
+      profilePicture: null, // Explicitly set to null
     });
 
     await user.save({ session });
     await session.commitTransaction();
 
-    // Return user data (matching Google sign-in response structure)
+    // Return user data (excluding sensitive information)
     res.status(201).json({
       success: true,
       data: {
@@ -56,10 +57,15 @@ const register = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
-    console.error("Registration error:", {
-      message: error.message,
-      stack: error.stack,
-    });
+    console.error("Registration error:", error);
+
+    // Improved error handling
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "This email is already registered",
+      });
+    }
 
     res.status(500).json({
       success: false,

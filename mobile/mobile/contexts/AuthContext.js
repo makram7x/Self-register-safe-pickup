@@ -42,6 +42,47 @@ export function AuthProvider({ children }) {
     loadUser();
   }, []);
 
+  // Modified signIn function for AuthContext.js
+  const signIn = async (userData) => {
+    console.log(
+      "Starting signIn with data:",
+      JSON.stringify(userData, null, 2)
+    );
+
+    // Normalize the user data structure for drivers
+    let normalizedData = userData;
+    if (userData.data?.driver) {
+      console.log("Detected driver login, normalizing data structure");
+      normalizedData = {
+        ...userData,
+        driver: userData.data.driver,
+        isDriver: true,
+      };
+    }
+
+    console.log(
+      "Normalized user data:",
+      JSON.stringify(normalizedData, null, 2)
+    );
+
+    try {
+      if (Platform.OS === "web") {
+        webStorage.setItem("user", normalizedData);
+      } else {
+        await AsyncStorage.setItem("user", JSON.stringify(normalizedData));
+      }
+      setUser(normalizedData);
+      console.log(
+        "SignIn completed, final user state:",
+        JSON.stringify(normalizedData, null, 2)
+      );
+    } catch (error) {
+      console.error("Error in signIn:", error);
+      throw error;
+    }
+  };
+
+  // Modified loadUser function
   const loadUser = async () => {
     console.log("Starting loadUser...");
     try {
@@ -53,32 +94,31 @@ export function AuthProvider({ children }) {
         userData = userStr ? JSON.parse(userStr) : null;
       }
 
-      console.log("Loaded user data:", userData);
+      console.log("Loaded raw user data:", JSON.stringify(userData, null, 2));
+
       if (userData) {
-        setUser(userData);
-        console.log("User state set:", userData);
+        // Ensure driver data is properly structured
+        if (userData.data?.driver || userData.driver) {
+          console.log("Found driver data, ensuring proper structure");
+          const normalizedData = {
+            ...userData,
+            driver: userData.data?.driver || userData.driver,
+            isDriver: true,
+          };
+          setUser(normalizedData);
+          console.log(
+            "Normalized driver data:",
+            JSON.stringify(normalizedData, null, 2)
+          );
+        } else {
+          setUser(userData);
+        }
       }
     } catch (error) {
       console.error("Error in loadUser:", error);
     } finally {
       setIsLoading(false);
       console.log("loadUser completed");
-    }
-  };
-
-  const signIn = async (userData) => {
-    console.log("Starting signIn:", userData);
-    try {
-      if (Platform.OS === "web") {
-        webStorage.setItem("user", userData);
-      } else {
-        await AsyncStorage.setItem("user", JSON.stringify(userData));
-      }
-      setUser(userData);
-      console.log("SignIn completed");
-    } catch (error) {
-      console.error("Error in signIn:", error);
-      throw error;
     }
   };
 

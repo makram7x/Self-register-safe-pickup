@@ -23,12 +23,15 @@ const userSchema = new Schema(
     },
     googleId: {
       type: String,
-      sparse: true,
+      sparse: true, // This allows multiple null values
+      unique: true, // But ensures unique googleIds when present
+      default: null,
     },
     authType: {
       type: String,
       required: true,
       enum: ["email", "google"],
+      default: "email",
     },
     profilePicture: {
       type: String,
@@ -44,9 +47,29 @@ const userSchema = new Schema(
   }
 );
 
-// Index for faster queries
+// Remove any existing indexes to prevent conflicts
+userSchema.pre("save", async function (next) {
+  try {
+    if (this.authType === "email") {
+      this.googleId = null; // Ensure googleId is null for email users
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Compound index to ensure unique combinations
 userSchema.index({ email: 1 });
-userSchema.index({ googleId: 1 });
+userSchema.index(
+  {
+    googleId: 1,
+  },
+  {
+    sparse: true, // This is crucial for allowing multiple null values
+    unique: true, // While maintaining uniqueness for non-null values
+  }
+);
 
 // Method to safely return user data
 userSchema.methods.toJSON = function () {
