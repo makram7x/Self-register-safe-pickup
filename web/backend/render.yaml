@@ -1,8 +1,11 @@
 services:
   - type: web
-    name: backend
-    runtime: nodejs
+    name: backend-service
+    runtime: node
     rootDirectory: web/backend
     buildCommand: npm install
-    startCommand: npm start
-    nodeVersion: 18.18.0
+    startCommand: node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 18.18.0
+    plan: free
