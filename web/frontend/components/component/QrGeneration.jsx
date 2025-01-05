@@ -1,3 +1,4 @@
+import { io } from "socket.io-client";
 import React, { useState, useEffect, useRef } from "react";
 import { Modal, Spin, notification, Select, Table, Tag } from "antd";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import {
   Clock,
   ShieldOff,
   Activity,
+  Trash2,
 } from "lucide-react";
 import axios from "axios";
 import html2canvas from "html2canvas"; // Make sure to install this package
@@ -26,10 +28,52 @@ const QrGeneration = () => {
   const [activeQRCodes, setActiveQRCodes] = useState([]);
 
   const qrCodeRef = useRef(null);
+  const socketRef = useRef(null);
 
+  const refreshData = async () => {
+    await Promise.all([fetchActiveQRCodes(), fetchQRHistory()]);
+  };
+
+  // Update socket event handler
   useEffect(() => {
-    fetchActiveQRCodes();
-    fetchQRHistory();
+    socketRef.current = io("http://localhost:5000", {
+      withCredentials: true,
+    });
+
+    socketRef.current.on("qrCodeUpdated", () => {
+      console.log("QR code update received via socket");
+      refreshData();
+    });
+
+    // Initial data fetch
+    refreshData();
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
+
+  // Initialize Socket.IO connection
+  useEffect(() => {
+    socketRef.current = io("http://localhost:5000", {
+      withCredentials: true,
+    });
+
+    // Listen for QR code updates
+    socketRef.current.on("qrCodeUpdated", () => {
+      console.log("QR code update received");
+      fetchActiveQRCodes();
+      fetchQRHistory();
+    });
+
+    // Cleanup on unmount
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
   }, []);
 
   const fetchActiveQRCodes = async () => {
@@ -42,10 +86,18 @@ const QrGeneration = () => {
       );
 
       if (response.data.success) {
-        setActiveQRCodes(response.data.activeQRCodes || []);
+        const formattedQRCodes = response.data.activeQRCodes.map((qr) => ({
+          ...qr,
+          generatedAt: qr.createdAt, // Ensure generatedAt is set for QRCodeDisplay
+        }));
+        setActiveQRCodes(formattedQRCodes);
       }
     } catch (error) {
       console.error("Error fetching active QR codes:", error);
+      notification.error({
+        message: "Error",
+        description: "Failed to fetch active QR codes",
+      });
     }
   };
 
@@ -59,10 +111,18 @@ const QrGeneration = () => {
       );
 
       if (response.data.success) {
-        setPreviousQRCodes(response.data.qrCodes || []);
+        const formattedQRCodes = response.data.qrCodes.map((qr) => ({
+          ...qr,
+          generatedAt: qr.createdAt, // Ensure generatedAt is set for QRCodeDisplay
+        }));
+        setPreviousQRCodes(formattedQRCodes);
       }
     } catch (error) {
       console.error("Error fetching QR history:", error);
+      notification.error({
+        message: "Error",
+        description: "Failed to fetch QR history",
+      });
     }
   };
 
@@ -72,89 +132,88 @@ const QrGeneration = () => {
     return date;
   };
 
- const generateQRCode = async () => {
-   try {
-     setIsLoading(true);
-     const expiryDate = calculateExpiryDate(expiryDuration);
-     const currentDate = new Date().toISOString();
+  const generateQRCode = async () => {
+    try {
+      setIsLoading(true);
+      const expiryDate = calculateExpiryDate(expiryDuration);
+      const currentDate = new Date().toISOString();
 
-     const response = await axios.post(
-       "http://localhost:5000/api/qr-codes/generate",
-       {
-         schoolId: "123",
-         timestamp: currentDate,
-         expiresAt: expiryDate.toISOString(),
-       }
-     );
+      const response = await axios.post(
+        "http://localhost:5000/api/qr-codes/generate",
+        {
+          schoolId: "123",
+          timestamp: currentDate,
+          expiresAt: expiryDate.toISOString(),
+        }
+      );
 
-     if (response.data.success) {
-       refreshData();
-       setIsGenerateModalOpen(false);
-       notification.success({
-         message: "QR Code Generated",
-         description: "New QR code has been generated successfully.",
-       });
-     }
-   } catch (error) {
-     notification.error({
-       message: "Error",
-       description: "Failed to generate QR code",
-     });
-   } finally {
-     setIsLoading(false);
-   }
- };
+      if (response.data.success) {
+        setIsGenerateModalOpen(false);
+        notification.success({
+          message: "QR Code Generated",
+          description: "New QR code has been generated successfully.",
+        });
+      }
+    } catch (error) {
+      notification.error({
+        message: "Error",
+        description: "Failed to generate QR code",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
- // Updated formatTimeLeft function with better date handling
- const formatTimeLeft = (expiryDate) => {
-   if (!expiryDate) return "Invalid date";
+  // Updated formatTimeLeft function with better date handling
+  const formatTimeLeft = (expiryDate) => {
+    if (!expiryDate) return "Invalid date";
 
-   try {
-     const now = new Date();
-     const expiry = new Date(expiryDate);
+    try {
+      const now = new Date();
+      const expiry = new Date(expiryDate);
 
-     if (isNaN(expiry.getTime())) return "Invalid date";
+      if (isNaN(expiry.getTime())) return "Invalid date";
 
-     const diff = expiry - now;
+      const diff = expiry - now;
 
-     if (diff <= 0) return "Expired";
+      if (diff <= 0) return "Expired";
 
-     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-     const hours = Math.floor(
-       (diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
-     );
-     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor(
+        (diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+      );
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
-     if (days > 0) return `${days}d ${hours}h left`;
-     if (hours > 0) return `${hours}h ${minutes}m left`;
-     return `${minutes}m left`;
-   } catch (error) {
-     console.error("Error formatting time left:", error);
-     return "Invalid date";
-   }
- };
+      if (days > 0) return `${days}d ${hours}h left`;
+      if (hours > 0) return `${hours}h ${minutes}m left`;
+      return `${minutes}m left`;
+    } catch (error) {
+      console.error("Error formatting time left:", error);
+      return "Invalid date";
+    }
+  };
 
- // Updated date formatter function
- const formatDate = (dateString) => {
-   if (!dateString) return "N/A";
+  // Updated date formatter function
+  const formatDate = (dateString) => {
+    if (!dateString) return "N/A";
 
-   try {
-     const date = new Date(dateString);
-     if (isNaN(date.getTime())) return "Invalid date";
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return "Invalid date";
 
-     return date.toLocaleString("en-US", {
-       year: "numeric",
-       month: "short",
-       day: "numeric",
-       hour: "2-digit",
-       minute: "2-digit",
-       hour12: true,
-     });
-   } catch (error) {
-     console.error("Error formatting date:", error);
-     return "Invalid date";
-   }
- };
+      return date.toLocaleString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch (error) {
+      console.error("Error formatting date:", error);
+      return "Invalid date";
+    }
+  };
 
   const deactivateQR = async (qrCode) => {
     try {
@@ -163,9 +222,6 @@ const QrGeneration = () => {
       );
 
       if (response.data.success) {
-        // Refresh both active QR codes and history after deactivation
-        await Promise.all([fetchActiveQRCodes(), fetchQRHistory()]);
-
         notification.success({
           message: "QR Code Deactivated",
           description: "The QR code has been deactivated successfully.",
@@ -283,9 +339,7 @@ const QrGeneration = () => {
           includeMargin={true}
         />
         <div className="mt-2 text-center text-black">
-          <p className="text-sm">
-            Generated: {formatDate(qrData.createdAt || qrData.generatedAt)}
-          </p>
+          <p className="text-sm">Generated: {formatDate(qrData.createdAt)}</p>
           <p className="text-sm">Expires: {formatDate(qrData.expiresAt)}</p>
         </div>
       </div>
@@ -312,6 +366,26 @@ const QrGeneration = () => {
       </div>
     </div>
   );
+
+  const deleteQR = async (qrCode) => {
+    try {
+      const response = await axios.delete(
+        `http://localhost:5000/api/qr-codes/${qrCode.code}`
+      );
+
+      if (response.data.success) {
+        notification.success({
+          message: "QR Code Deleted",
+          description: "The QR code has been deleted successfully.",
+        });
+      }
+    } catch (error) {
+      notification.error({
+        message: "Error",
+        description: "Failed to delete QR code",
+      });
+    }
+  };
 
   // Updated history columns with better date handling
   const historyColumns = [
@@ -354,18 +428,70 @@ const QrGeneration = () => {
       title: "Action",
       key: "action",
       render: (_, record) => (
-        <Button
-          size="sm"
-          onClick={() => {
-            setSelectedQR(record);
-            setIsQRDisplayModalOpen(true);
-          }}
-        >
-          View QR
-        </Button>
+        <div className="space-x-2">
+          <Button
+            size="sm"
+            onClick={() => {
+              setSelectedQR(record);
+              setIsQRDisplayModalOpen(true);
+            }}
+          >
+            View QR
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => {
+              Modal.confirm({
+                title: "Delete QR Code",
+                content:
+                  "Are you sure you want to delete this QR code? This action cannot be undone.",
+                okText: "Delete",
+                okButtonProps: { className: "bg-red-500 hover:bg-red-600" },
+                onOk: () => deleteQR(record),
+              });
+            }}
+          >
+            Delete
+          </Button>
+        </div>
       ),
     },
   ];
+
+  // In QrGeneration.jsx - Add delete button to active QR codes modal
+  {
+    activeQRCodes.map((qr, index) => (
+      <div key={index} className="border-b border-gray-700 pb-6 last:border-0">
+        <QRCodeDisplay qrData={qr} />
+        <div className="mt-4 flex justify-center space-x-2">
+          <Button
+            onClick={() => deactivateQR(qr)}
+            className="flex items-center bg-red-500 hover:bg-red-600 text-white"
+          >
+            <ShieldOff className="h-4 w-4 mr-2" />
+            Deactivate QR Code
+          </Button>
+          <Button
+            onClick={() => {
+              Modal.confirm({
+                title: "Delete QR Code",
+                content:
+                  "Are you sure you want to delete this QR code? This action cannot be undone.",
+                okText: "Delete",
+                okButtonProps: { className: "bg-red-500 hover:bg-red-600" },
+                onOk: () => deleteQR(qr),
+              });
+            }}
+            className="flex items-center bg-red-500 hover:bg-red-600 text-white"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete QR Code
+          </Button>
+        </div>
+      </div>
+    ));
+  }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
@@ -486,7 +612,7 @@ const QrGeneration = () => {
         <Table
           dataSource={previousQRCodes}
           columns={historyColumns}
-          rowKey="id"
+          rowKey={(record) => record.id || record.code}
         />
       </Modal>
 

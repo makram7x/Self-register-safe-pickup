@@ -59,8 +59,178 @@ export default function Dashboard() {
   const [pendingPickups, setPendingPickups] = useState([]);
   const [socket, setSocket] = useState(null);
   const [bgColor, setBgColor] = useState("white");
+  const [announcementCount, setAnnouncementCount] = useState(0);
+  const [pickupStats, setPickupStats] = useState({
+    activeCount: 0,
+    delayedCount: 0,
+    completedCount: 0,
+    cancelledCount: 0,
+  });
 
-  
+  useEffect(() => {
+    console.log("Initializing socket connection...");
+    const newSocket = io("http://localhost:5000", {
+      transports: ["websocket"],
+      upgrade: false,
+    });
+
+    newSocket.on("connect", () => {
+      console.log("Socket connected:", newSocket.id);
+    });
+
+    newSocket.on("connect_error", (error) => {
+      console.error("Socket connection error:", error);
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      console.log("Disconnecting socket...");
+      newSocket.disconnect();
+    };
+  }, []);
+
+  // Stats update effect
+  useEffect(() => {
+    const fetchInitialStats = async () => {
+      try {
+        console.log("Fetching initial stats...");
+        const [active, delayed, completed, cancelled] = await Promise.all([
+          axios.get("http://localhost:5000/api/pickup/active/count"),
+          axios.get("http://localhost:5000/api/pickup/delayed/count"),
+          axios.get("http://localhost:5000/api/pickup/completed/count"),
+          axios.get("http://localhost:5000/api/pickup/cancelled/count"),
+        ]);
+
+        const newStats = {
+          activeCount: active.data.count,
+          delayedCount: delayed.data.count,
+          completedCount: completed.data.count,
+          cancelledCount: cancelled.data.count,
+        };
+
+        console.log("Setting initial stats:", newStats);
+        setPickupStats(newStats);
+      } catch (error) {
+        console.error("Error fetching initial stats:", error);
+      }
+    };
+
+    fetchInitialStats();
+
+    if (socket) {
+      console.log("Setting up stats listener on socket:", socket.id);
+
+      socket.on("pickup-stats-update", (stats) => {
+        console.log("Received stats update:", stats);
+        setPickupStats((prevStats) => {
+          console.log("Updating stats from:", prevStats, "to:", stats);
+          return stats;
+        });
+      });
+
+      return () => {
+        console.log("Cleaning up socket listener");
+        socket.off("pickup-stats-update");
+      };
+    }
+  }, [socket]);
+
+  // Stats display component
+  const StatsDisplay = () => {
+    console.log("Rendering stats:", pickupStats); // Debug log
+    return (
+      <div className="flex space-x-8">
+        {[
+          {
+            label: "Active Pickups",
+            value: pickupStats.activeCount,
+            icon: <UsersIcon className="h-4 w-4" />,
+            color: "text-green-500",
+          },
+          {
+            label: "Delayed",
+            value: pickupStats.delayedCount,
+            icon: <ClockIcon className="h-4 w-4" />,
+            color: "text-yellow-500",
+          },
+          {
+            label: "Completed",
+            value: pickupStats.completedCount,
+            icon: <CheckIcon className="h-4 w-4" />,
+            color: "text-grey-500",
+          },
+          {
+            label: "Cancelled",
+            value: pickupStats.cancelledCount,
+            icon: <XIcon className="h-4 w-4" />,
+            color: "text-red-500",
+          },
+        ].map((stat, index) => (
+          <div key={index} className="text-center">
+            <div className={`text-2xl font-bold ${stat.color}`}>
+              {stat.value}
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-300">
+              {stat.label}
+            </div>
+            <div
+              className={`text-xs flex items-center justify-center mt-1 ${stat.color}`}
+            >
+              {stat.icon}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    const fetchSchoolData = async () => {
+      try {
+        const [studentRes, parentRes] = await Promise.all([
+          axios.get("http://localhost:5000/api/students/count"),
+          axios.get("http://localhost:5000/api/students/parent-count"),
+        ]);
+
+        setStudentCount(studentRes.data.count);
+        setParentCount(parentRes.data.count);
+      } catch (error) {
+        console.error("Error fetching school data:", error);
+      }
+    };
+
+    fetchSchoolData();
+  }, []);
+
+  useEffect(() => {
+    const fetchAnnouncementCount = async () => {
+      try {
+        const response = await axios.get(
+          "http://localhost:5000/api/notifications"
+        );
+        setAnnouncementCount(response.data.length);
+      } catch (error) {
+        console.error("Error fetching announcements:", error);
+      }
+    };
+
+    fetchAnnouncementCount();
+
+    // Set up real-time updates if using socket
+    if (socket) {
+      socket.on("notification-created", fetchAnnouncementCount);
+      socket.on("notification-deleted", fetchAnnouncementCount);
+    }
+
+    return () => {
+      if (socket) {
+        socket.off("notification-created");
+        socket.off("notification-deleted");
+      }
+    };
+  }, [socket]);
+
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -101,14 +271,6 @@ export default function Dashboard() {
   const handleBellClick = () => {
     handleDrawerOpen();
   };
-
-  // Initialize Socket connection
-  useEffect(() => {
-    const newSocket = io("http://localhost:5000");
-    setSocket(newSocket);
-
-    return () => newSocket.disconnect();
-  }, []);
 
   // Fetch initial pending pickups
   const fetchPendingPickups = async () => {
@@ -246,6 +408,10 @@ export default function Dashboard() {
     };
 
     fetchStudentCount();
+    // fetchDelayedPickups();
+    // fetchActivePickups();
+    // fetchCompletedPickups();
+    // fetchCancelledPickups();
   }, []);
 
   useEffect(() => {
@@ -310,53 +476,7 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex space-x-8">
-                {[
-                  {
-                    label: "Active Pickups",
-                    value: "23",
-                    trend: "+5",
-                    icon: <UsersIcon className="h-4 w-4" />,
-                    color: "text-green-500",
-                  },
-                  {
-                    label: "Delayed",
-                    value: "3",
-                    trend: "-2",
-                    icon: <ClockIcon className="h-4 w-4" />,
-                    color: "text-yellow-500",
-                  },
-                  {
-                    label: "Completed",
-                    value: "45",
-                    trend: "+12",
-                    icon: <CheckIcon className="h-4 w-4" />,
-                    color: "text-grey-500",
-                  },
-                  {
-                    label: "Cancelled",
-                    value: "1",
-                    trend: "0",
-                    icon: <XIcon className="h-4 w-4" />,
-                    color: "text-red-500",
-                  },
-                ].map((stat, index) => (
-                  <div key={index} className="text-center">
-                    <div className={`text-2xl font-bold ${stat.color}`}>
-                      {stat.value}
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-300">
-                      {stat.label}
-                    </div>
-                    <div
-                      className={`text-xs flex items-center justify-center mt-1 ${stat.color}`}
-                    >
-                      <TrendingUp className="h-3 w-3 mr-1" />
-                      {stat.trend}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <StatsDisplay />
             </CardContent>
           </Card>
 
@@ -375,10 +495,10 @@ export default function Dashboard() {
                 <ClockIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">45</div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <div className="text-2xl font-bold">{studentCount}</div>
+                {/* <p className="text-xs text-gray-500 dark:text-gray-400">
                   +3 since last hour
-                </p>
+                </p> */}
               </CardContent>
             </Card>
             <Card>
@@ -389,10 +509,10 @@ export default function Dashboard() {
                 <CheckIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">987</div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <div className="text-2xl font-bold">{parentCount}</div>
+                {/* <p className="text-xs text-gray-500 dark:text-gray-400">
                   +50 since last hour
-                </p>
+                </p> */}
               </CardContent>
             </Card>
             <Card>
@@ -403,10 +523,7 @@ export default function Dashboard() {
                 <MegaphoneIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">12</div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  +2 since last hour
-                </p>
+                <div className="text-2xl font-bold">{announcementCount}</div>
               </CardContent>
             </Card>
           </div>
@@ -569,7 +686,7 @@ export default function Dashboard() {
           open={isNotificationDrawerOpen}
           width={400}
           drawerStyle={{
-            backgroundColor: bgColor
+            backgroundColor: bgColor,
           }}
           styles={{
             body: {
@@ -581,12 +698,12 @@ export default function Dashboard() {
           }}
         >
           {/* <div className="bg-white dark:bg-gray-800 h-full"> */}
-            <RealtimePickupDrawer
-              isOpen={isNotificationDrawerOpen}
-              // onClose={handleDrawerClose}
-              onPickupsUpdate={(pickups) => setPendingPickups(pickups)}
-              socket={socket}
-            />
+          <RealtimePickupDrawer
+            isOpen={isNotificationDrawerOpen}
+            // onClose={handleDrawerClose}
+            onPickupsUpdate={(pickups) => setPendingPickups(pickups)}
+            socket={socket}
+          />
           {/* </div> */}
         </Drawer>
       </div>

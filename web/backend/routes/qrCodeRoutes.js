@@ -25,4 +25,6 @@ router.get("/active", QRCodeController.getActiveQRCodes);
 
 router.patch("/:code/deactivate", QRCodeController.deactivateQRCode);
 
+router.delete("/:code", QRCodeController.deleteQRCode);
+
 module.exports = router;

@@ -1,7 +1,5 @@
 // AnnouncementModal.js
-// AnnouncementModal.js
 "use client";
-import { useState } from "react";
 import { Modal, Input, Select, Form, Button } from "antd";
 import {
   CalendarCheckIcon,
@@ -55,7 +53,7 @@ export default function AnnouncementModal({ open, onClose, onSubmit }) {
   return (
     <Modal
       title={
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+        <h3 className="text-lg font-semibold text-gray-900">
           Create New Announcement
         </h3>
       }
@@ -67,21 +65,22 @@ export default function AnnouncementModal({ open, onClose, onSubmit }) {
           backgroundColor: "rgba(0, 0, 0, 0.5)",
         },
         wrapper: {
-          backgroundColor: "var(--tw-bg-gray-800)",
+          backgroundColor: "rgba(0, 0, 0, 0.5)",
         },
         header: {
-          backgroundColor: "rgb(31 41 55)", // matches dark:bg-gray-800
-          borderBottom: "1px solid rgb(55 65 81)", // matches dark:border-gray-700
+          backgroundColor: "white",
+          borderBottom: "1px solid rgb(229 231 235)", // light gray border
         },
         content: {
-          backgroundColor: "rgb(31 41 55)", // matches dark:bg-gray-800
+          backgroundColor: "white",
         },
         body: {
-          backgroundColor: "rgb(31 41 55)", // matches dark:bg-gray-800
+          backgroundColor: "white",
         },
       }}
     >
-      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg">
+      <div className="bg-white">
+        {" "}
         <Form
           form={form}
           layout="vertical"

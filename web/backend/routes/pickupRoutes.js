@@ -7,8 +7,16 @@ const {
   deletePickup,
   updatePickupStatus,
   getAllPickupLogs, // Add this import
+  getActivePickupsCount,
+  getDelayedPickupsCount,
+  getCompletedPickupsCount,
+  getCancelledPickupsCount,
 } = require("../controller/pickupController");
 
+router.get("/active/count", getActivePickupsCount);
+router.get("/delayed/count", getDelayedPickupsCount);
+router.get("/completed/count", getCompletedPickupsCount);
+router.get("/cancelled/count", getCancelledPickupsCount);
 // Add this new route
 router.delete("/delete-all", deleteAllPickupLogs); // This must come before the /:id route
 router.get("/logs", getAllPickupLogs);

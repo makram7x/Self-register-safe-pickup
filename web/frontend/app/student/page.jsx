@@ -45,6 +45,7 @@ import {
   TableBody,
   Table,
 } from "@/components/ui/table";
+import { message } from "antd";
 import { AvatarImage, AvatarFallback, Avatar } from "@/components/ui/avatar";
 import { useState, useEffect } from "react";
 import axios from "axios";
@@ -76,6 +77,11 @@ export default function StudentPage() {
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [uploadErrors, setUploadErrors] = useState([]);
   const [showErrorModal, setShowErrorModal] = useState(false);
+  const [deletionResultsVisible, setDeletionResultsVisible] = useState(false);
+  const [deletionResults, setDeletionResults] = useState({
+    students: 0,
+    links: 0,
+  });
 
   const openModal = () => {
     setIsOpen(true);
@@ -127,22 +133,25 @@ export default function StudentPage() {
         const deletedCount = studentsResponse.data.deletedCount;
         const linksCount = linksResponse.data.deletedCount || 0;
 
-        alert(
+        setShowDeleteAllModal(false);
+
+        message.success(
           `Successfully deleted ${deletedCount} student${
             deletedCount !== 1 ? "s" : ""
           } and ${linksCount} associated link${linksCount !== 1 ? "s" : ""}`
         );
+
         await fetchStudents();
-        setShowDeleteAllModal(false);
       } else {
         throw new Error("Failed to delete students");
       }
     } catch (error) {
       console.error("Error in deletion process:", error);
-      alert(
-        `Error during deletion: ${
-          error.response?.data?.message || error.message || "Please try again."
-        }`
+      message.error(
+        "Error during deletion: " +
+          (error.response?.data?.message ||
+            error.message ||
+            "Please try again.")
       );
     } finally {
       setIsDeletingAll(false);
@@ -463,7 +472,9 @@ export default function StudentPage() {
       <main className="flex flex-1 flex-col p-4 md:p-6 overflow-hidden">
         <Card className="flex-1 flex flex-col">
           <CardHeader className="flex flex-col items-center justify-between pb-2 space-y-4 md:flex-row md:space-y-0">
-            <CardTitle className="text-xl font-medium">Students Management</CardTitle>
+            <CardTitle className="text-xl font-medium">
+              Students Management
+            </CardTitle>
             <div className="flex items-center space-x-4">
               <div className="flex items-center">
                 <DropdownMenu>
@@ -516,8 +527,7 @@ export default function StudentPage() {
                   <SearchIcon className="h-4 w-4" />
                 </Button>
               </div>
-              
-              
+
               {showAnnouncementModal && (
                 <div className="fixed z-10 inset-0 overflow-y-auto">
                   <div className="flex items-center justify-center min-h-screen">

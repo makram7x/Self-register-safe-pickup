@@ -10,12 +10,14 @@ const { Server } = require("socket.io");
 // Create HTTP server
 const server = http.createServer(app);
 
+console.log("Node.js version:", process.version);
 // Initialize Socket.IO with CORS
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000", // Your frontend URL
-    methods: ["GET", "POST"],
+    origin: ["http://localhost:3000", "http://localhost:5173"], // Your frontend URL
+    methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
+    allowedHeaders: ["Content-Type"],
   },
 });
 
@@ -61,7 +63,6 @@ app.use("/api/auth", authRoutes);
 app.use("/api/pickup", pickupRoutes);
 app.use("/api/qr-codes", qrCodeRoutes);
 app.use("/api/drivers", driverRoutes);
-
 
 // 404 handler
 app.use((req, res, next) => {
