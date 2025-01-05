@@ -1,7 +1,7 @@
 const Driver = require("../models/driverSchema");
 const ParentStudentLink = require("../models/parentStudentLink");
 const crypto = require("crypto");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 require("dotenv").config();
