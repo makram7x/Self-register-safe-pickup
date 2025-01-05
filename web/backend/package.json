@@ -5,10 +5,10 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "build": "npm ci && npm cache clean --force"
+    "build": "npm install --omit=dev"
   },
   "engines": {
-    "node": "18.x"
+    "node": ">=18.0.0 <21.0.0"
   },
   "dependencies": {
     "bcrypt": "5.0.1",
@@ -19,8 +19,8 @@
     "dotenv": "16.0.0",
     "express": "4.17.1",
     "jsonwebtoken": "8.5.1",
-    "mongoose": "6.10.1",
-    "mongodb": "4.17.1",
+    "mongoose": "7.3.4",
+    "mongodb": "5.7.0",
     "socket.io": "4.4.1",
     "socket.io-client": "4.4.1"
   },
