@@ -1,9 +1,10 @@
 {
   "name": "self-register-safe-pickup",
   "version": "1.0.0",
+  "type": "module",
   "main": "server.js",
   "scripts": {
-    "build": "rm -rf node_modules && npm install --production",
+    "build": "npm install",
     "start": "node server.js",
     "dev": "nodemon server.js"
   },
@@ -20,6 +21,7 @@
     "jsonwebtoken": "8.5.1",
     "mongoose": "8.0.3",
     "mongodb": "6.3.0",
+    "bson": "6.2.0",
     "socket.io": "4.4.1",
     "socket.io-client": "4.4.1"
   },
