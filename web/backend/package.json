@@ -1,7 +1,6 @@
 {
   "name": "self-register-safe-pickup",
   "version": "1.0.0",
-  "type": "module",
   "main": "server.js",
   "scripts": {
     "build": "npm install",
