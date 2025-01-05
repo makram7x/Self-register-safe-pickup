@@ -13,8 +13,8 @@ import {
   Image,
   Platform,
   ActivityIndicator,
+  showErrorAlert
 } from "react-native";
-import { Camera, CameraView } from "expo-camera"; // Simplified camera import
 import { ThemedView } from "../../components/ThemedView";
 import Checkbox from "expo-checkbox";
 import axios from "axios";
@@ -23,7 +23,6 @@ import { useAuth } from "../../contexts/AuthContext";
 import { QrCode, PlusCircle, LogOut, User } from "lucide-react-native";
 import QRScanner from "../../components/QRscanner";
 import PickupConfirmationModal from "../../components/PickupConfirmationModal";
-import DriverManagement from "../../components/DriverManagement";
 
 export default function HomeScreen() {
   const [scanning, setScanning] = useState(false);
@@ -209,63 +208,6 @@ export default function HomeScreen() {
     }
   };
 
-  // Modify the button rendering in the return statement
-  // const renderActionButton = () => {
-  //   if (linkedStudents.length === 0) {
-  //     return null;
-  //   }
-
-  //   if (activePickup) {
-  //     return (
-  //       <TouchableOpacity
-  //         style={[styles.actionButton, styles.trackButton]}
-  //         onPress={handleTrackPickup}
-  //       >
-  //         <Text style={styles.actionButtonText}>Track Pickup</Text>
-  //       </TouchableOpacity>
-  //     );
-  //   }
-
-  //   return (
-  //     <TouchableOpacity
-  //       style={[styles.actionButton, styles.scanButton]}
-  //       onPress={() => setScanning(!scanning)}
-  //     >
-  //       <Text style={styles.actionButtonText}>
-  //         {scanning ? "Cancel Scan" : "Scan QR Code"}
-  //       </Text>
-  //     </TouchableOpacity>
-  //   );
-  // };
-
-  // const showErrorAlert = (title, message) => {
-  //   if (isAlertShowing) return;
-
-  //   // Immediately stop scanning when showing error
-  //   setScanning(false);
-  //   setIsAlertShowing(true);
-
-  //   Alert.alert(
-  //     title,
-  //     message,
-  //     [
-  //       {
-  //         text: "OK",
-  //         onPress: () => {
-  //           // Reset all states
-  //           setIsVerifying(false);
-  //           setLastScannedCode(null);
-  //           setScannedPickupCode(null);
-  //           setIsAlertShowing(false);
-  //         },
-  //       },
-  //     ],
-  //     {
-  //       cancelable: false,
-  //     }
-  //   );
-  // };
-
   const verifyQRCode = async (code) => {
     try {
       const userId = getUserId();
@@ -404,37 +346,6 @@ export default function HomeScreen() {
     );
   };
 
-  // const getUserId = () => {
-  //   if (!user) return null;
-  //   const userData = user.data || user;
-
-  //   // For driver users
-  //   if (userData.isDriver && userData.data?.driver?.id) {
-  //     return userData.data.driver.id;
-  //   }
-
-  //   // First try to get the ID from common fields
-  //   const possibleIdFields = ["_id", "id", "uid", "userId"];
-  //   for (const field of possibleIdFields) {
-  //     if (userData[field]) {
-  //       return userData[field];
-  //     }
-  //   }
-
-  //   // Fallback to email-based ID
-  //   return userData.email
-  //     ? `email_${userData.email.replace(/[^a-zA-Z0-9]/g, "_")}`
-  //     : null;
-  // };
-
-  // const showAlert = (title, message) => {
-  //   if (Platform.OS === "web") {
-  //     alert(`${title}\n\n${message}`);
-  //   } else {
-  //     Alert.alert(title, message);
-  //   }
-  // };
-
   useEffect(() => {
     console.log("Current user data:", user);
     console.log("Is parent user?", isParentUser());
@@ -443,67 +354,140 @@ export default function HomeScreen() {
   }, [user]);
 
   const verifyAndAddStudent = async () => {
-    const userId = getUserId();
-    if (!userId) {
-      showAlert("Error", "Please ensure you are logged in to add students");
-      return;
-    }
-
-    const trimmedCode = studentCode.trim().toUpperCase();
-    if (!trimmedCode) {
-      showAlert("Error", "Please enter a student code");
-      return;
-    }
-
-    const isAlreadyLinked = linkedStudents.some(
-      (student) => student.code === trimmedCode
-    );
-
-    if (isAlreadyLinked) {
-      showAlert("Warning", "You have already linked this student.");
-      return;
-    }
-
     try {
-      const verifyResponse = await axios.get(
-        `http://192.168.100.3:5000/api/parent-student-links/verify/${trimmedCode}`
-      );
-
-      if (!verifyResponse.data.success) {
-        showAlert("Warning", "The entered student code does not exist.");
+      // 1. Basic validation checks
+      const userId = getUserId();
+      if (!userId) {
+        Alert.alert(
+          "Authentication Error",
+          "Please ensure you are logged in before adding students"
+        );
         return;
       }
 
-      // Create the link
-      const createLinkResponse = await axios.post(
-        "http://192.168.100.3:5000/api/parent-student-links",
-        {
-          parentId: userId,
-          uniqueCode: trimmedCode,
-        }
+      // 2. Input validation
+      const trimmedCode = studentCode.trim().toUpperCase();
+      if (!trimmedCode) {
+        Alert.alert("Invalid Input", "Please enter a valid student code");
+        return;
+      }
+
+      // 3. Check if code format is valid (assuming codes are 6 characters)
+      if (trimmedCode.length !== 6) {
+        Alert.alert(
+          "Invalid Code Format",
+          "Student code must be 6 characters long"
+        );
+        return;
+      }
+
+      // 4. Check if student is already linked
+      const existingStudent = linkedStudents.find(
+        (student) => student.code === trimmedCode
       );
 
-      console.log("Create link response:", createLinkResponse.data); // Debug log
+      if (existingStudent) {
+        Alert.alert(
+          "Already Linked",
+          `This student (${existingStudent.name}) is already linked to your account`
+        );
+        return;
+      }
 
-      if (createLinkResponse.data.success) {
-        const newStudent = {
-          code: createLinkResponse.data.data.code,
-          name: createLinkResponse.data.data.name,
-          linkId: createLinkResponse.data.data.linkId,
-        };
+      // 5. Verify the student code exists
+      try {
+        const verifyResponse = await axios.get(
+          `http://192.168.100.3:5000/api/parent-student-links/verify/${trimmedCode}`
+        );
 
-        console.log("Adding new student:", newStudent); // Debug log
+        if (!verifyResponse.data.success) {
+          Alert.alert(
+            "Invalid Code",
+            "The entered student code does not exist in our system"
+          );
+          return;
+        }
 
-        setLinkedStudents((prev) => [...prev, newStudent]);
-        setStudentCode("");
-        setShowAddModal(false);
-        Alert.alert("Success", "Student successfully linked to your account");
+        // 6. Create the link
+        try {
+          const createLinkResponse = await axios.post(
+            "http://192.168.100.3:5000/api/parent-student-links",
+            {
+              parentId: userId,
+              uniqueCode: trimmedCode,
+            }
+          );
+
+          if (createLinkResponse.data.success) {
+            const newStudent = {
+              code: createLinkResponse.data.data.code,
+              name: createLinkResponse.data.data.name,
+              linkId: createLinkResponse.data.data.linkId,
+            };
+
+            // Update state and storage
+            setLinkedStudents((prev) => [...prev, newStudent]);
+
+            // Store in AsyncStorage for persistence
+            const updatedStudents = [...linkedStudents, newStudent];
+            await AsyncStorage.setItem(
+              "linkedStudents",
+              JSON.stringify(updatedStudents)
+            );
+
+            // Reset form and close modal
+            setStudentCode("");
+            setShowAddModal(false);
+
+            Alert.alert(
+              "Success",
+              `${newStudent.name} has been successfully linked to your account`
+            );
+          }
+        } catch (linkError) {
+          // Handle specific link creation errors
+          if (linkError.response?.status === 409) {
+            Alert.alert(
+              "Already Linked",
+              "This student is already linked to another account"
+            );
+          } else if (linkError.response?.status === 403) {
+            Alert.alert(
+              "Link Not Allowed",
+              "You are not authorized to link this student"
+            );
+          } else {
+            throw linkError; // Pass other errors to main error handler
+          }
+        }
+      } catch (verifyError) {
+        if (verifyError.response?.status === 404) {
+          Alert.alert(
+            "Invalid Code",
+            "The provided student code was not found"
+          );
+        } else {
+          throw verifyError; // Pass other errors to main error handler
+        }
       }
     } catch (error) {
-      console.error("Error linking student:", error);
-      showAlert(
+      console.error("Error in verifyAndAddStudent:", error);
+
+      // Handle network errors
+      if (!error.response) {
+        Alert.alert(
+          "Connection Error",
+          "Please check your internet connection and try again"
+        );
+        return;
+      }
+
+      // Handle other errors with specific messages
+      const errorMessage =
+        error.response?.data?.message || "An unexpected error occurred";
+      Alert.alert(
         "Error",
-        error.response?.data?.message || "Failed to link student"
+        `Failed to link student: ${errorMessage}. Please try again later.`
       );
     }
   };
@@ -542,61 +526,61 @@ export default function HomeScreen() {
   };
 
   // Modified loadStoredStudents function
-  const loadStoredStudents = async (userId) => {
-    try {
-      if (!user) {
-        console.log("No user data available");
-        return [];
-      }
+  // const loadStoredStudents = async (userId) => {
+  //   try {
+  //     if (!user) {
+  //       console.log("No user data available");
+  //       return [];
+  //     }
 
-      console.log(
-        "Loading students with user data:",
-        JSON.stringify(user, null, 2)
-      );
+  //     console.log(
+  //       "Loading students with user data:",
+  //       JSON.stringify(user, null, 2)
+  //     );
 
-      // For driver users, use parentId directly from driver data
-      if (user.isDriver || user.driver || user.data?.driver) {
-        const driverData = user.driver || user.data?.driver;
-        const parentId = driverData?.parentId;
+  //     // For driver users, use parentId directly from driver data
+  //     if (user.isDriver || user.driver || user.data?.driver) {
+  //       const driverData = user.driver || user.data?.driver;
+  //       const parentId = driverData?.parentId;
 
-        if (!parentId) {
-          console.error("No parentId found in driver data");
-          return [];
-        }
+  //       if (!parentId) {
+  //         console.error("No parentId found in driver data");
+  //         return [];
+  //       }
 
-        console.log("Using parentId from driver data:", parentId);
+  //       console.log("Using parentId from driver data:", parentId);
 
-        // Fetch student links directly using parentId
-        const response = await axios.get(
-          `http://192.168.100.3:5000/api/parent-student-links/${parentId}`
-        );
+  //       // Fetch student links directly using parentId
+  //       const response = await axios.get(
+  //         `http://192.168.100.3:5000/api/parent-student-links/${parentId}`
+  //       );
 
-        console.log("Parent-student links response:", response.data);
+  //       console.log("Parent-student links response:", response.data);
 
-        if (response.data.success) {
-          return response.data.data;
-        }
-        return [];
-      }
+  //       if (response.data.success) {
+  //         return response.data.data;
+  //       }
+  //       return [];
+  //     }
 
-      // For parent users, use their own ID
-      const response = await axios.get(
-        `http://192.168.100.3:5000/api/parent-student-links/${userId}`
-      );
+  //     // For parent users, use their own ID
+  //     const response = await axios.get(
+  //       `http://192.168.100.3:5000/api/parent-student-links/${userId}`
+  //     );
 
-      if (response.data.success) {
-        return response.data.data;
-      }
+  //     if (response.data.success) {
+  //       return response.data.data;
+  //     }
 
-      return [];
-    } catch (error) {
-      console.error("Error in loadStoredStudents:", error);
-      if (error.response) {
-        console.error("API error response:", error.response.data);
-      }
-      return [];
-    }
-  };
+  //     return [];
+  //   } catch (error) {
+  //     console.error("Error in loadStoredStudents:", error);
+  //     if (error.response) {
+  //       console.error("API error response:", error.response.data);
+  //     }
+  //     return [];
+  //   }
+  // };
 
   // Modified initialize function
   const initialize = async () => {
@@ -608,26 +592,73 @@ export default function HomeScreen() {
         return;
       }
 
+      // Debug user object
+      console.log("User object structure:", JSON.stringify(user, null, 2));
+
+      let userId;
       // For driver users, use parentId directly
       if (user.isDriver || user.driver || user.data?.driver) {
         const driverData = user.driver || user.data?.driver;
         if (driverData?.parentId) {
-          console.log(
-            "Loading students for driver with parentId:",
-            driverData.parentId
-          );
-          const students = await loadStoredStudents();
-          console.log("Loaded students for driver:", students);
-          setLinkedStudents(students);
+          userId = driverData.parentId;
+          console.log("Using driver's parentId:", userId);
         }
       } else {
         // For parent users
-        const userId = getUserId();
-        if (userId) {
-          console.log("Loading students for parent with userId:", userId);
-          const students = await loadStoredStudents(userId);
-          console.log("Loaded students for parent:", students);
-          setLinkedStudents(students);
+        userId = getUserId();
+        console.log("Using parent userId:", userId);
+      }
+
+      if (!userId) {
+        console.error("Failed to get valid userId");
+        setIsInitialized(true);
+        return;
+      }
+
+      try {
+        const response = await axios.get(
+          `http://192.168.100.3:5000/api/parent-student-links/${userId}`
+        );
+
+        console.log("API Response:", response.data);
+
+        if (response.data.success) {
+          console.log("Successfully loaded students:", response.data.data);
+
+          // Validate data structure before setting
+          const validLinks = response.data.data.every(
+            (link) => link && link.code && link.name && link.linkId
+          );
+
+          if (validLinks) {
+            setLinkedStudents(response.data.data);
+            await AsyncStorage.setItem(
+              "linkedStudents",
+              JSON.stringify(response.data.data)
+            );
+          } else {
+            console.error("Invalid link data structure:", response.data.data);
+          }
+        } else {
+          console.error(
+            "API request successful but returned error:",
+            response.data
+          );
+        }
+      } catch (error) {
+        console.error("API request failed:", error);
+        if (error.response) {
+          console.error("Error response:", error.response.data);
+        }
+
+        // Try to load from AsyncStorage as fallback
+        try {
+          const storedStudents = await AsyncStorage.getItem("linkedStudents");
+          if (storedStudents) {
+            setLinkedStudents(JSON.parse(storedStudents));
+          }
+        } catch (storageError) {
+          console.error("AsyncStorage fallback failed:", storageError);
         }
       }
 
@@ -663,49 +694,6 @@ export default function HomeScreen() {
       initialize();
     }
   }, [isAuthLoaded, user]);
-
-  // Update loadStoredStudents to handle the correct data structure
-  // const loadStoredStudents = async (userId) => {
-  //   try {
-  //     const userData = user.data || user;
-  //     console.log("Loading students for user data:", userData);
-
-  //     let parentId;
-  //     if (userData.driver) {
-  //       // For drivers, get the parent ID from the driver data
-  //       const driverResponse = await axios.get(
-  //         `http://192.168.100.3:5000/api/drivers/single/${userData.driver.id}`
-  //       );
-
-  //       if (!driverResponse.data.success) {
-  //         console.error("Failed to get driver details");
-  //         return [];
-  //       }
-
-  //       parentId = driverResponse.data.data.parentId;
-  //     } else {
-  //       // For parents, use their own ID
-  //       parentId = userId;
-  //     }
-
-  //     if (!parentId) {
-  //       console.error("No valid parent ID found");
-  //       return [];
-  //     }
-
-  //     const response = await axios.get(
-  //       `http://192.168.100.3:5000/api/parent-student-links/${parentId}`
-  //     );
-
-  //     if (response.data.success) {
-  //       return response.data.data;
-  //     }
-  //     return [];
-  //   } catch (error) {
-  //     console.error("Error loading students:", error);
-  //     return [];
-  //   }
-  // };
 
   // Update isParentUser to match the actual data structure
   const isParentUser = () => {
@@ -755,7 +743,6 @@ export default function HomeScreen() {
 
     try {
       // Show loading state
-      
 
       const response = await axios.delete(
         `http://192.168.100.3:5000/api/parent-student-links/${linkId}`
@@ -1018,12 +1005,6 @@ export default function HomeScreen() {
                     renderStudentItem(student, index)
                   )}
                 </View>
-
-                {isAuthLoaded && user && getUserId() && (
-                  <View style={styles.driverManagementSection}>
-                    <DriverManagement parentId={getUserId()} />
-                  </View>
-                )}
               </>
             ) : (
               <View style={styles.section}>
@@ -1040,9 +1021,6 @@ export default function HomeScreen() {
                         <View style={styles.studentInfo}>
                           <Text style={styles.studentName}>
                             {student.name || "No name available"}
-                          </Text>
-                          <Text style={styles.studentCode}>
-                            Code: {student.code}
                           </Text>
                         </View>
                         <View style={styles.studentStatus}>
@@ -1174,14 +1152,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginBottom: 20,
   },
-
-  driverManagementSection: {
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
-  },
-
   contentContainer: {
     flex: 1,
     paddingBottom: Platform.OS === "ios" ? 40 : 20,

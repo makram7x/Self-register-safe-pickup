@@ -12,7 +12,6 @@ const QRScanner = ({ onBarCodeScanned, onCancel }) => {
 
   useEffect(() => {
     console.log("QRScanner mounted. Permission status:", permission?.granted);
-    // Reset scanning state when component mounts
     setIsScanning(true);
     return () => {
       console.log("QRScanner unmounted");
@@ -25,10 +24,9 @@ const QRScanner = ({ onBarCodeScanned, onCancel }) => {
     console.log("Scan type:", result.type);
     console.log("Scan data:", result.data);
 
-    if (!isScanning) return; // Prevent multiple scans
+    if (!isScanning) return;
 
-    setIsScanning(false); // Disable scanning temporarily
-    // Call the parent's handler
+    setIsScanning(false);
     onBarCodeScanned(result);
   };
 
@@ -55,22 +53,13 @@ const QRScanner = ({ onBarCodeScanned, onCancel }) => {
         </Text>
         <TouchableOpacity
           style={styles.permissionButton}
-          onPress={async () => {
-            console.log("Requesting camera permission...");
-            const result = await requestPermission();
-            console.log("Permission request result:", result);
-          }}
+          onPress={requestPermission}
         >
           <Text style={styles.permissionButtonText}>Grant Permission</Text>
         </TouchableOpacity>
       </View>
     );
   }
-
-  console.log(
-    "Camera permission granted, rendering camera view. Scanning state:",
-    isScanning
-  );
 
   return (
     <View style={styles.container}>
@@ -82,13 +71,7 @@ const QRScanner = ({ onBarCodeScanned, onCancel }) => {
           barcodeTypes: ["qr"],
         }}
         onBarcodeScanned={isScanning ? handleBarCodeScanned : undefined}
-        onCameraReady={() => {
-          console.log("Camera is ready for scanning");
-          setIsScanning(true); // Enable scanning when camera is ready
-        }}
-        onMountError={(error) => {
-          console.error("Camera mount error:", error);
-        }}
+        onCameraReady={() => setIsScanning(true)}
       >
         <View style={styles.overlay}>
           <View style={styles.scanArea}>
@@ -109,14 +92,15 @@ const QRScanner = ({ onBarCodeScanned, onCancel }) => {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "black",
   },
   camera: {
     flex: 1,
-    width: "100%",
-    aspectRatio: 16 / 9,
   },
   message: {
     textAlign: "center",

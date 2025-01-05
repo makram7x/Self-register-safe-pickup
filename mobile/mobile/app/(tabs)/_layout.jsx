@@ -1,15 +1,18 @@
 import { Tabs } from "expo-router";
 import React, { useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
 import { TabBarIcon } from "../../components/navigation/TabBarIcon";
 import { Colors } from "../../constants/Colors";
 import { useColorScheme } from "../../hooks/useColorScheme";
-// import { checkUnreadNotifications } from "../../components/notificationService";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const [unreadCount, setUnreadCount] = useState(0);
+  const { user } = useAuth();
+
+  // Check if user is a driver
+  const isDriver = Boolean(user?.isDriver);
 
   useEffect(() => {
     const checkUnreadNotifications = async () => {
@@ -25,13 +28,12 @@ export default function TabLayout() {
         ).length;
         setUnreadCount(unreadCount);
       } catch (error) {
-        console.error("Error checking unread notifications:", error);
+        console.error("Error checking notifications:", error);
       }
     };
 
     checkUnreadNotifications();
-    const interval = setInterval(checkUnreadNotifications, 60000); // Check every minute
-
+    const interval = setInterval(checkUnreadNotifications, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -42,6 +44,19 @@ export default function TabLayout() {
         headerShown: false,
       }}
     >
+      <Tabs.Screen
+        name="explore"
+        options={{
+          title: "Explore",
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon
+              name={focused ? "notifications" : "notifications-outline"}
+              color={color}
+            />
+          ),
+          tabBarBadge: unreadCount > 0 ? unreadCount : null,
+        }}
+      />
       <Tabs.Screen
         name="index"
         options={{
@@ -55,29 +70,14 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="explore"
-        options={{
-          title: "Explore",
-          tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon
-              name={focused ? "code-slash" : "code-slash-outline"}
-              color={color}
-            />
-          ),
-          tabBarBadge: unreadCount > 0 ? unreadCount : null,
-        }}
-      />
-      <Tabs.Screen
-        name="Driver"
+        name="driver"
         options={{
           title: "Driver",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon
-              name={focused ? "code-slash" : "code-slash-outline"}
-              color={color}
-            />
+            <TabBarIcon name={focused ? "car" : "car-outline"} color={color} />
           ),
-          tabBarBadge: unreadCount > 0 ? unreadCount : null,
+          href: isDriver ? null : "/driver", // Hide tab for drivers by setting href to null
+          tabBarStyle: isDriver ? { display: "none" } : undefined,
         }}
       />
     </Tabs>

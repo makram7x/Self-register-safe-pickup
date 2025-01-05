@@ -2,41 +2,9 @@ const express = require("express");
 const router = express.Router();
 const QRCode = require("../models/QRcode");
 const crypto = require("crypto");
+const io = require("socket.io-client");
 
 // Generate new QR code
-const generateQRCode = async (req, res) => {
-  try {
-    const { schoolId, timestamp, expiresAt } = req.body;
-
-    // Generate unique code
-    const code = crypto.randomBytes(16).toString("hex");
-
-    const qrCode = new QRCode({
-      schoolId,
-      code,
-      createdAt: timestamp || new Date(),
-      expiresAt: expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000),
-      isActive: true,
-      scans: [],
-    });
-
-    await qrCode.save();
-
-    res.json({
-      success: true,
-      qrCode: code,
-      expiresAt: qrCode.expiresAt,
-      generatedAt: qrCode.createdAt,
-    });
-  } catch (error) {
-    console.error("Error generating QR code:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to generate QR code",
-      error: error.message,
-    });
-  }
-};
 
 // Verify QR code
 const verifyQRCode = async (req, res) => {
@@ -125,64 +93,25 @@ const verifyQRCode = async (req, res) => {
   }
 };
 
-// Get QR code history
-const getQRCodeHistory = async (req, res) => {
-  try {
-    const { schoolId } = req.query;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-
-    const qrCodes = await QRCode.find({ schoolId })
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .lean(); // Using lean() for better performance since we don't need Mongoose instances
-
-    const total = await QRCode.countDocuments({ schoolId });
-
-    const formattedQRCodes = qrCodes.map((qr) => ({
-      ...qr,
-      status: qr.isActive
-        ? new Date() > qr.expiresAt
-          ? "expired"
-          : "active"
-        : "deactivated",
-    }));
-
-    res.json({
-      success: true,
-      qrCodes: formattedQRCodes,
-      currentPage: page,
-      totalPages: Math.ceil(total / limit),
-      totalQRCodes: total,
-    });
-  } catch (error) {
-    console.error("Error fetching QR codes:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch QR codes",
-      error: error.message,
-    });
-  }
-};
-
-// Get active QR codes
 const getActiveQRCodes = async (req, res) => {
   try {
-    const { schoolId } = req.query;
-
+    // Remove schoolId filter temporarily to debug
     const activeQRCodes = await QRCode.find({
-      schoolId,
       isActive: true,
       expiresAt: { $gt: new Date() },
-    })
-      .sort({ createdAt: -1 })
-      .lean();
+    }).lean();
+
+    console.log("Found active QR codes:", activeQRCodes.length); // Debug log
 
     const formattedQRCodes = activeQRCodes.map((qr) => ({
       ...qr,
+      id: qr._id.toString(),
+      code: qr.code,
+      createdAt: qr.createdAt,
+      generatedAt: qr.createdAt,
+      expiresAt: qr.expiresAt,
+      isActive: qr.isActive,
       status: "active",
-      timeLeft: new Date(qr.expiresAt) - new Date(),
     }));
 
     res.json({
@@ -199,11 +128,89 @@ const getActiveQRCodes = async (req, res) => {
   }
 };
 
-// Deactivate QR code
+const getQRCodeHistory = async (req, res) => {
+  try {
+    // Remove schoolId filter temporarily to debug
+    const qrCodes = await QRCode.find({}).sort({ createdAt: -1 }).lean();
+
+    console.log("Found QR codes in history:", qrCodes.length); // Debug log
+
+    const formattedQRCodes = qrCodes.map((qr) => {
+      const now = new Date();
+      const expiry = new Date(qr.expiresAt);
+
+      let status = qr.isActive
+        ? now > expiry
+          ? "expired"
+          : "active"
+        : "deactivated";
+
+      return {
+        ...qr,
+        id: qr._id.toString(),
+        code: qr.code,
+        createdAt: qr.createdAt,
+        generatedAt: qr.createdAt,
+        expiresAt: qr.expiresAt,
+        status: status,
+      };
+    });
+
+    res.json({
+      success: true,
+      qrCodes: formattedQRCodes,
+    });
+  } catch (error) {
+    console.error("Error fetching QR codes:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch QR codes",
+      error: error.message,
+    });
+  }
+};
+
+const generateQRCode = async (req, res) => {
+  try {
+    const { schoolId, timestamp, expiresAt } = req.body;
+    const code = crypto.randomBytes(16).toString("hex");
+
+    const qrCode = new QRCode({
+      schoolId: schoolId || "default", // Provide a default value
+      code,
+      createdAt: timestamp || new Date(),
+      expiresAt: expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000),
+      isActive: true,
+      scans: [],
+    });
+
+    await qrCode.save();
+    console.log("Generated new QR code:", qrCode); // Debug log
+
+    // Emit socket event
+    req.app.get("io").emit("qrCodeUpdated");
+
+    res.json({
+      success: true,
+      qrCode: {
+        ...qrCode.toObject(),
+        id: qrCode._id.toString(),
+        generatedAt: qrCode.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Error generating QR code:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate QR code",
+      error: error.message,
+    });
+  }
+};
+
 const deactivateQRCode = async (req, res) => {
   try {
     const { code } = req.params;
-
     const qrCode = await QRCode.findOne({ code });
 
     if (!qrCode) {
@@ -215,6 +222,9 @@ const deactivateQRCode = async (req, res) => {
 
     qrCode.isActive = false;
     await qrCode.save();
+
+    // Emit socket event
+    req.app.get("io").emit("qrCodeUpdated");
 
     res.json({
       success: true,
@@ -230,6 +240,35 @@ const deactivateQRCode = async (req, res) => {
   }
 };
 
+const deleteQRCode = async (req, res) => {
+  try {
+    const { code } = req.params;
+    const result = await QRCode.findOneAndDelete({ code });
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: "QR code not found",
+      });
+    }
+
+    // Emit socket event
+    req.app.get("io").emit("qrCodeUpdated");
+
+    res.json({
+      success: true,
+      message: "QR code deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error deleting QR code:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete QR code",
+      error: error.message,
+    });
+  }
+};
+
 //export all the functions
 module.exports = {
   generateQRCode,
@@ -237,4 +276,5 @@ module.exports = {
   getQRCodeHistory,
   getActiveQRCodes,
   deactivateQRCode,
+  deleteQRCode,
 };

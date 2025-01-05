@@ -6,20 +6,30 @@ const getParentLinks = async (req, res) => {
   try {
     const { parentId } = req.params;
     console.log("Fetching links for parentId:", parentId);
-    console.log("ParentId type:", typeof parentId);
 
-    // Convert to string if not already
-    const parentIdString = parentId.toString();
+    // Add debugging to check collection
+    const totalDocs = await ParentStudentLink.countDocuments();
+    console.log("Total documents in collection:", totalDocs);
 
+    // Use more flexible query
     const links = await ParentStudentLink.find({
-      parentId: parentIdString,
-      active: true,
-    });
+      parentId: { $regex: new RegExp(parentId, "i") },
+    }).lean();
 
-    console.log(
-      `Found ${links.length} links for parent ${parentIdString}:`,
-      links
-    );
+    console.log("Raw links found:", links);
+
+    if (!links || links.length === 0) {
+      // Try alternative query with toString()
+      const altLinks = await ParentStudentLink.find({
+        parentId: parentId.toString(),
+      }).lean();
+
+      console.log("Alternative query links:", altLinks);
+
+      if (altLinks.length > 0) {
+        links = altLinks;
+      }
+    }
 
     const formattedLinks = links.map((link) => ({
       code: link.studentInfo.uniqueCode,
@@ -32,6 +42,11 @@ const getParentLinks = async (req, res) => {
     res.status(200).json({
       success: true,
       data: formattedLinks,
+      debug: {
+        totalDocuments: totalDocs,
+        rawLinks: links,
+        searchedParentId: parentId,
+      },
     });
   } catch (error) {
     console.error("Error fetching parent links:", error);
@@ -39,6 +54,7 @@ const getParentLinks = async (req, res) => {
       success: false,
       message: "Error fetching linked students",
       error: error.message,
+      stack: error.stack,
     });
   }
 };

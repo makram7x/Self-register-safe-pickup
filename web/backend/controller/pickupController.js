@@ -4,6 +4,36 @@ const mongoose = require("mongoose");
 const Driver = require("../models/driverSchema");
 const User = require("../models/userSchema");
 
+// Helper function for emitting pickup stats
+const emitPickupStats = async (io) => {
+  try {
+    // Get counts directly instead of using the route handlers
+    const [activeCount, delayedCount, completedCount, cancelledCount] = await Promise.all([
+      Pickup.countDocuments({ status: "pending" }),
+      Pickup.countDocuments({
+        status: "pending",
+        pickupTime: {
+          $lt: new Date(Date.now() - 15 * 60 * 1000) // 15 minutes ago
+        }
+      }),
+      Pickup.countDocuments({ status: "completed" }),
+      Pickup.countDocuments({ status: "cancelled" })
+    ]);
+
+    const stats = {
+      activeCount,
+      delayedCount,
+      completedCount,
+      cancelledCount
+    };
+
+    console.log('Emitting new stats:', stats); // Debug log
+    io.emit("pickup-stats-update", stats);
+  } catch (error) {
+    console.error("Error emitting pickup stats:", error);
+  }
+};
+
 const getParentPickups = async (req, res) => {
   try {
     const parentId = req.user?._id || req.user?.id || req.user;
@@ -39,7 +69,7 @@ const getParentPickups = async (req, res) => {
 const deletePickup = async (req, res) => {
   try {
     const { id } = req.params;
-    const IO = req.app.get("io"); // Get Socket.IO instance
+    const io = req.app.get("io");
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -57,8 +87,10 @@ const deletePickup = async (req, res) => {
       });
     }
 
-    // Emit socket event for real-time updates
-    IO.emit("pickup-deleted", id);
+    if (io) {
+      io.emit("pickup-deleted", id);
+      await emitPickupStats(io);
+    }
 
     res.status(200).json({
       success: true,
@@ -77,6 +109,12 @@ const deletePickup = async (req, res) => {
 const deleteAllPickupLogs = async (req, res) => {
   try {
     const result = await Pickup.deleteMany({});
+    const io = req.app.get("io");
+
+    if (io) {
+      await emitPickupStats(io);
+    }
+
     return res.status(200).json({
       success: true,
       message: "All pickup logs deleted successfully",
@@ -92,21 +130,11 @@ const deleteAllPickupLogs = async (req, res) => {
   }
 };
 
-// Create new pickup
 const createPickup = async (req, res) => {
-  console.log("Request body:", req.body);
-  console.log("Driver ID:", req.body.driverId);
-  if (req.body.driverId) {
-    const driver = await Driver.findById(req.body.driverId);
-    console.log("Found driver:", driver);
-    const parentUser = await User.findById(driver.parentId);
-    console.log("Found parent:", parentUser);
-  }
   try {
     const { pickupCode, studentIds, studentInfo, parent, driverId } = req.body;
     const io = req.app.get("io");
 
-    // Validate required data
     if (!pickupCode || !studentIds || !studentIds.length) {
       return res.status(400).json({
         success: false,
@@ -114,12 +142,10 @@ const createPickup = async (req, res) => {
       });
     }
 
-    // If driverId is provided, get driver and parent information
     let initiator = null;
     let parentInfo = parent;
 
     if (driverId) {
-      // Get driver information
       const driver = await Driver.findById(driverId);
       if (!driver) {
         return res.status(404).json({
@@ -128,7 +154,6 @@ const createPickup = async (req, res) => {
         });
       }
 
-      // Get parent information using the driver's parentId
       const parentUser = await User.findById(driver.parentId);
       if (!parentUser) {
         return res.status(404).json({
@@ -137,7 +162,6 @@ const createPickup = async (req, res) => {
         });
       }
 
-      // Set initiator as driver
       initiator = {
         id: driver._id,
         name: driver.name,
@@ -147,7 +171,6 @@ const createPickup = async (req, res) => {
         verificationCode: driver.verificationCode,
       };
 
-      // Set parent information from the found parent user
       parentInfo = {
         id: parentUser._id,
         name: parentUser.name,
@@ -155,7 +178,6 @@ const createPickup = async (req, res) => {
       };
     }
 
-    // Validate parent information is available
     if (
       !parentInfo ||
       !parentInfo.id ||
@@ -168,7 +190,6 @@ const createPickup = async (req, res) => {
       });
     }
 
-    // Create new pickup
     const newPickup = new Pickup({
       pickupCode,
       studentIds,
@@ -188,7 +209,6 @@ const createPickup = async (req, res) => {
       status: "pending",
     });
 
-    // Initialize status history
     newPickup.statusHistory.push({
       status: "pending",
       updatedBy: {
@@ -201,8 +221,10 @@ const createPickup = async (req, res) => {
 
     await newPickup.save();
 
-    // Emit socket event for real-time updates
-    io.emit("new-pickup", newPickup);
+    if (io) {
+      io.emit("new-pickup", newPickup);
+      await emitPickupStats(io);
+    }
 
     res.status(201).json({
       success: true,
@@ -228,8 +250,6 @@ const updatePickupStatus = async (req, res) => {
     const { status, updatedBy, notes } = req.body;
     const io = req.app.get("io");
 
-    console.log("Update request body:", req.body); // Debug log
-
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -246,18 +266,15 @@ const updatePickupStatus = async (req, res) => {
       });
     }
 
-    // Update pickup status
     pickup.status = status;
 
-    // Set completed information if status is completed
     if (status === "completed") {
       pickup.completedAt = new Date();
 
-      // Set completedBy based on who's completing the pickup
       if (updatedBy?.type === "staff") {
         pickup.completedBy = {
           ...updatedBy,
-          type: "staff", // Ensure type is set correctly for admin/staff
+          type: "staff",
         };
       } else if (updatedBy?.type === "driver") {
         pickup.completedBy = {
@@ -269,11 +286,10 @@ const updatePickupStatus = async (req, res) => {
           id: pickup.parent.id,
           name: pickup.parent.name,
           email: pickup.parent.email,
-          type: "staff", // Default to staff for parent completions in completedBy
+          type: "staff",
         };
       }
 
-      // Add to status history with original updater type
       pickup.statusHistory.push({
         status,
         updatedAt: new Date(),
@@ -281,23 +297,22 @@ const updatePickupStatus = async (req, res) => {
         updatedBy: {
           id: updatedBy?.id || pickup.parent.id,
           name: updatedBy?.name || pickup.parent.name,
-          type: updatedBy?.type || "parent", // Keep original type in history
+          type: updatedBy?.type || "parent",
           email: updatedBy?.email || pickup.parent.email,
         },
       });
     }
 
-    console.log("Updated pickup before save:", JSON.stringify(pickup, null, 2)); // Debug log
-
     const updatedPickup = await pickup.save();
 
-    console.log("Pickup after save:", JSON.stringify(updatedPickup, null, 2)); // Debug log
-
-    io.emit("pickup-status-updated", {
-      pickupId: id,
-      status,
-      pickup: updatedPickup,
-    });
+    if (io) {
+      io.emit("pickup-status-updated", {
+        pickupId: id,
+        status,
+        pickup: updatedPickup,
+      });
+      await emitPickupStats(io);
+    }
 
     res.json({
       success: true,
@@ -314,7 +329,6 @@ const updatePickupStatus = async (req, res) => {
   }
 };
 
-// Update getAllPickupLogs to match the new schema
 const getAllPickupLogs = async (req, res) => {
   try {
     const pickups = await Pickup.find()
@@ -332,8 +346,6 @@ const getAllPickupLogs = async (req, res) => {
       })
       .sort({ pickupTime: -1 });
 
-    console.log("Sample pickup data:", pickups[0]); // Debug log
-
     res.json({
       success: true,
       data: pickups,
@@ -348,6 +360,55 @@ const getAllPickupLogs = async (req, res) => {
   }
 };
 
+const getActivePickupsCount = async (req, res) => {
+  try {
+    const count = await Pickup.countDocuments({ status: "pending" });
+    res.json({ count });
+  } catch (error) {
+    console.error("Error fetching active pickups count:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const getDelayedPickupsCount = async (req, res) => {
+  try {
+    const currentTime = new Date();
+    const fifteenMinutesInMs = 15 * 60 * 1000;
+
+    const count = await Pickup.countDocuments({
+      status: "pending",
+      pickupTime: {
+        $lt: new Date(currentTime.getTime() - fifteenMinutesInMs),
+      },
+    });
+
+    res.json({ count });
+  } catch (error) {
+    console.error("Error fetching delayed pickups count:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const getCompletedPickupsCount = async (req, res) => {
+  try {
+    const count = await Pickup.countDocuments({ status: "completed" });
+    res.json({ count });
+  } catch (error) {
+    console.error("Error fetching completed pickups count:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const getCancelledPickupsCount = async (req, res) => {
+  try {
+    const count = await Pickup.countDocuments({ status: "cancelled" });
+    res.json({ count });
+  } catch (error) {
+    console.error("Error fetching cancelled pickups count:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 module.exports = {
   createPickup,
   getParentPickups,
@@ -355,4 +416,9 @@ module.exports = {
   deletePickup,
   getAllPickupLogs,
   deleteAllPickupLogs,
+  getActivePickupsCount,
+  getCompletedPickupsCount,
+  getCancelledPickupsCount,
+  getDelayedPickupsCount,
+  emitPickupStats,
 };
