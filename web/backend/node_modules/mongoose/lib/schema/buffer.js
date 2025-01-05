@@ -60,8 +60,8 @@ SchemaBuffer._checkRequired = v => !!(v && v.length);
  *     const User = mongoose.model('User', new Schema({ test: Buffer }));
  *     new User({ }).validateSync().errors.test.message; // Path `test` is required.
  *
- * @param {String} option - The option you'd like to set the value for
- * @param {*} value - value for option
+ * @param {String} option The option you'd like to set the value for
+ * @param {Any} value value for option
  * @return {undefined}
  * @function set
  * @static
@@ -224,8 +224,8 @@ SchemaBuffer.prototype.subtype = function(subtype) {
 /*!
  * ignore
  */
-function handleSingle(val) {
-  return this.castForQuery(val);
+function handleSingle(val, context) {
+  return this.castForQuery(null, val, context);
 }
 
 SchemaBuffer.prototype.$conditionalHandlers =
@@ -248,17 +248,16 @@ SchemaBuffer.prototype.$conditionalHandlers =
  * @api private
  */
 
-SchemaBuffer.prototype.castForQuery = function($conditional, val) {
+SchemaBuffer.prototype.castForQuery = function($conditional, val, context) {
   let handler;
-  if (arguments.length === 2) {
+  if ($conditional != null) {
     handler = this.$conditionalHandlers[$conditional];
     if (!handler) {
       throw new Error('Can\'t use ' + $conditional + ' with Buffer.');
     }
     return handler.call(this, val);
   }
-  val = $conditional;
-  const casted = this._castForQuery(val);
+  const casted = this.applySetters(val, context);
   return casted ? casted.toObject({ transform: false, virtuals: false }) : casted;
 };
 
