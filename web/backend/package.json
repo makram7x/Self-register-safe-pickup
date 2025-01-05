@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "build": "npm ci"
+    "build": "npm ci && npm cache clean --force"
   },
   "engines": {
     "node": "18.x"
@@ -19,8 +19,8 @@
     "dotenv": "16.0.0",
     "express": "4.17.1",
     "jsonwebtoken": "8.5.1",
-    "mongoose": "7.6.0",
-    "mongodb": "5.0.0",
+    "mongoose": "6.10.1",
+    "mongodb": "4.17.1",
     "socket.io": "4.4.1",
     "socket.io-client": "4.4.1"
   },
