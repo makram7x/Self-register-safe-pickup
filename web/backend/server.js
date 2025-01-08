@@ -43,9 +43,6 @@ io.on("connection", (socket) => {
   });
 });
 
-// Make io accessible to other files
-app.set("io", io);
-
 // Middleware
 app.use(express.json());
 app.use(
@@ -128,7 +125,7 @@ connectDB();
 
 // Import routes
 const studentRoutes = require("./routes/studentRoutes");
-const notificationsRoutes = require("./routes/notificationsRoutes");
+const createNotificationRoutes = require("./routes/notificationsRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const uniqueCodeRoutes = require("./routes/uniqueCodeRoutes");
 const userRoutes = require("./routes/userRoutes");
@@ -138,9 +135,9 @@ const pickupRoutes = require("./routes/pickupRoutes");
 const qrCodeRoutes = require("./routes/qrCodeRoutes");
 const driverRoutes = require("./routes/driverRoutes");
 
-// Routes
+// Routes with Socket.IO integration
 app.use("/api/students", studentRoutes);
-app.use("/api/notifications", notificationsRoutes);
+app.use("/api/notifications", createNotificationRoutes(io)); // Pass io to notifications routes
 app.use("/api/upload", uploadRoutes);
 app.use("/api/generate-codes", uniqueCodeRoutes);
 app.use("/api/users", userRoutes);
@@ -186,4 +183,22 @@ server.listen(PORT, () => {
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
   console.log(`Health check: http://localhost:${PORT}/`);
   console.log(`API documentation: http://localhost:${PORT}/api`);
+});
+
+// Handle unhandled promise rejections
+process.on("unhandledRejection", (err) => {
+  console.error("Unhandled Promise Rejection:", err);
+  // Don't exit the process in development
+  if (process.env.NODE_ENV === "production") {
+    server.close(() => process.exit(1));
+  }
+});
+
+// Handle uncaught exceptions
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception:", err);
+  // Don't exit the process in development
+  if (process.env.NODE_ENV === "production") {
+    server.close(() => process.exit(1));
+  }
 });
