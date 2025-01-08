@@ -88,7 +88,7 @@ export function NotificationProvider({ children }) {
   };
 
   useEffect(() => {
-    const newSocket = io("http://localhost:5000");
+    const newSocket = io("https://self-register-safe-pickup-production.up.railway.app");
     setSocket(newSocket);
 
     return () => newSocket.disconnect();

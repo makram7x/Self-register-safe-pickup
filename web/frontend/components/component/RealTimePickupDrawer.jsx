@@ -160,50 +160,50 @@ const RealtimePickupDrawer = ({ isOpen, onClose, onPickupsUpdate }) => {
     setShowConfirmModal(true);
   };
 
- const handlePickupStatus = async () => {
-   if (!selectedPickup || !actionType) return;
+  const handlePickupStatus = async () => {
+    if (!selectedPickup || !actionType) return;
 
-   try {
-     setIsProcessing(true);
-     await axios.put(
-       `http://localhost:5000/api/pickup/${selectedPickup.id}/status`,
-       {
-         status: actionType,
-         updatedBy: {
-           id: "507f1f77bcf86cd799439011", // A valid ObjectId format
-           name: "Admin User",
-           type: "staff", // Changed from 'admin' to 'staff' to match enum
-           email: "admin@example.com",
-         },
-         notes: `Pickup ${actionType} by admin at ${new Date().toISOString()}`,
-       }
-     );
+    try {
+      setIsProcessing(true);
+      await axios.put(
+        `https://self-register-safe-pickup-production.up.railway.app/api/pickup/${selectedPickup.id}/status`,
+        {
+          status: actionType,
+          updatedBy: {
+            id: "507f1f77bcf86cd799439011", // A valid ObjectId format
+            name: "Admin User",
+            type: "staff", // Changed from 'admin' to 'staff' to match enum
+            email: "admin@example.com",
+          },
+          notes: `Pickup ${actionType} by admin at ${new Date().toISOString()}`,
+        }
+      );
 
-     // Show success notification
-     notification.success({
-       message: "Success",
-       description: `Pickup ${actionType} successfully`,
-       placement: "topRight",
-     });
+      // Show success notification
+      notification.success({
+        message: "Success",
+        description: `Pickup ${actionType} successfully`,
+        placement: "topRight",
+      });
 
-     // Remove from local state if completed or cancelled
-     setPickups((prev) => prev.filter((p) => p.id !== selectedPickup.id));
-   } catch (error) {
-     console.error(`Error updating pickup status:`, error);
-     notification.error({
-       message: "Error",
-       description: `Failed to ${actionType} pickup: ${
-         error.response?.data?.message || error.message
-       }`,
-       placement: "topRight",
-     });
-   } finally {
-     setIsProcessing(false);
-     setShowConfirmModal(false);
-     setSelectedPickup(null);
-     setActionType(null);
-   }
- };
+      // Remove from local state if completed or cancelled
+      setPickups((prev) => prev.filter((p) => p.id !== selectedPickup.id));
+    } catch (error) {
+      console.error(`Error updating pickup status:`, error);
+      notification.error({
+        message: "Error",
+        description: `Failed to ${actionType} pickup: ${
+          error.response?.data?.message || error.message
+        }`,
+        placement: "topRight",
+      });
+    } finally {
+      setIsProcessing(false);
+      setShowConfirmModal(false);
+      setSelectedPickup(null);
+      setActionType(null);
+    }
+  };
 
   const StatusConfirmationModal = () => (
     <Modal

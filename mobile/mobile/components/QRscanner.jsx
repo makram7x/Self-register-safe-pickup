@@ -70,7 +70,7 @@ const QRScanner = ({ onBarCodeScanned, onCancel }) => {
         barcodeScannerSettings={{
           barcodeTypes: ["qr"],
         }}
-        onBarcodeScanned={isScanning ? handleBarCodeScanned : undefined}
+        onBarcodeScanned={isScanning ? handleBarCodeScanned : null}
         onCameraReady={() => setIsScanning(true)}
       >
         <View style={styles.overlay}>

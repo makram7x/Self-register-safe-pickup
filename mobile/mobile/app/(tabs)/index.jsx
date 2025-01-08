@@ -13,7 +13,6 @@ import {
   Image,
   Platform,
   ActivityIndicator,
-  showErrorAlert
 } from "react-native";
 import { ThemedView } from "../../components/ThemedView";
 import Checkbox from "expo-checkbox";
@@ -96,7 +95,7 @@ export default function HomeScreen() {
       console.log("Submitting pickup data:", pickupData); // Debug log
 
       const response = await axios.post(
-        "http://192.168.100.3:5000/api/pickup",
+        "https://self-register-safe-pickup-production.up.railway.app/api/pickup",
         pickupData
       );
 
@@ -220,7 +219,7 @@ export default function HomeScreen() {
       }
 
       const response = await axios.post(
-        "http://192.168.100.3:5000/api/qr-codes/verify",
+        "https://self-register-safe-pickup-production.up.railway.app/api/qr-codes/verify",
         {
           code: code,
           parentId: userId,
@@ -248,37 +247,88 @@ export default function HomeScreen() {
   };
 
   const handleBarCodeScanned = async ({ type, data }) => {
-    // Prevent scanning if already processing
     if (isVerifying || isAlertShowing) {
       return;
     }
-
+    setScanning(false);
+    setIsVerifying(true);
     console.log("QR code scanned:", type, data);
 
     if (type === "qr" || type === "org.iso.QRCode") {
-      setIsVerifying(true);
-
       try {
-        // Pause scanning while verifying
-        setScanning(false);
-
         const verificationResult = await verifyQRCode(data);
-
         if (verificationResult.success) {
           setScannedPickupCode(data);
           setShowPickupModal(true);
         } else {
-          showErrorAlert("Invalid QR Code", verificationResult.message);
+          setIsAlertShowing(true);
+          const errorMessage = verificationResult.message || "Invalid QR code";
+          Alert.alert(
+            "Invalid QR Code",
+            errorMessage,
+            [
+              {
+                text: "Close",
+                onPress: () => {
+                  setIsAlertShowing(false);
+                  setIsVerifying(false);
+                },
+              },
+            ],
+            { cancelable: false }
+          );
         }
       } catch (error) {
         console.error("Error during QR verification:", error);
-        showErrorAlert("Error", "Failed to verify QR code. Please try again.");
-      } finally {
-        setIsVerifying(false);
-        // Note: Don't re-enable scanning here, let the user initiate a new scan
+        setIsAlertShowing(true);
+        const alertConfig = {
+          expired: {
+            title: "Expired QR Code",
+            message: "This QR code has expired. Please request a new one.",
+          },
+          inactive: {
+            title: "Inactive QR Code",
+            message:
+              "This QR code is no longer active. Please request a new one.",
+          },
+          default: {
+            title: "Error",
+            message: "Failed to verify QR code. Please try again.",
+          },
+        };
+        const errorType = error.response?.data?.qrStatus || "default";
+        const { title, message } = alertConfig[errorType];
+        Alert.alert(
+          title,
+          message,
+          [
+            {
+              text: "Close",
+              onPress: () => {
+                setIsAlertShowing(false);
+                setIsVerifying(false);
+              },
+            },
+          ],
+          { cancelable: false }
+        );
       }
     } else {
-      showErrorAlert("Invalid Code", "Please scan a valid QR code.");
+      setIsAlertShowing(true);
+      Alert.alert(
+        "Invalid Code",
+        "Please scan a valid QR code.",
+        [
+          {
+            text: "Close",
+            onPress: () => {
+              setIsAlertShowing(false);
+              setIsVerifying(false);
+            },
+          },
+        ],
+        { cancelable: false }
+      );
     }
   };
 
@@ -411,7 +461,7 @@ export default function HomeScreen() {
         // 6. Create the link
         try {
           const createLinkResponse = await axios.post(
-            "http://192.168.100.3:5000/api/parent-student-links",
+            "https://self-register-safe-pickup-production.up.railway.app/api/parent-student-links",
             {
               parentId: userId,
               uniqueCode: trimmedCode,
@@ -524,63 +574,6 @@ export default function HomeScreen() {
     console.error("No ID found in user object:", JSON.stringify(user, null, 2));
     return null;
   };
-
-  // Modified loadStoredStudents function
-  // const loadStoredStudents = async (userId) => {
-  //   try {
-  //     if (!user) {
-  //       console.log("No user data available");
-  //       return [];
-  //     }
-
-  //     console.log(
-  //       "Loading students with user data:",
-  //       JSON.stringify(user, null, 2)
-  //     );
-
-  //     // For driver users, use parentId directly from driver data
-  //     if (user.isDriver || user.driver || user.data?.driver) {
-  //       const driverData = user.driver || user.data?.driver;
-  //       const parentId = driverData?.parentId;
-
-  //       if (!parentId) {
-  //         console.error("No parentId found in driver data");
-  //         return [];
-  //       }
-
-  //       console.log("Using parentId from driver data:", parentId);
-
-  //       // Fetch student links directly using parentId
-  //       const response = await axios.get(
-  //         `http://192.168.100.3:5000/api/parent-student-links/${parentId}`
-  //       );
-
-  //       console.log("Parent-student links response:", response.data);
-
-  //       if (response.data.success) {
-  //         return response.data.data;
-  //       }
-  //       return [];
-  //     }
-
-  //     // For parent users, use their own ID
-  //     const response = await axios.get(
-  //       `http://192.168.100.3:5000/api/parent-student-links/${userId}`
-  //     );
-
-  //     if (response.data.success) {
-  //       return response.data.data;
-  //     }
-
-  //     return [];
-  //   } catch (error) {
-  //     console.error("Error in loadStoredStudents:", error);
-  //     if (error.response) {
-  //       console.error("API error response:", error.response.data);
-  //     }
-  //     return [];
-  //   }
-  // };
 
   // Modified initialize function
   const initialize = async () => {
@@ -953,7 +946,10 @@ export default function HomeScreen() {
         <View style={styles.contentContainer}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Code with Beto</Text>
+            <Image
+              source={require("../../assets/images/logo-2.png")}
+              style={{ width: 40, height: 40, objectFit: "contain" }}
+            />
             <TouchableOpacity
               style={styles.profileButton}
               onPress={(e) => {
@@ -1431,6 +1427,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
     paddingHorizontal: 10,
+    marginTop: 10,
   },
   title: {
     fontSize: 24,

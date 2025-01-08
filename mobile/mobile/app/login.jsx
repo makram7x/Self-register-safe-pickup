@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   ActivityIndicator,
   Alert,
+  Image,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as Google from "expo-auth-session/providers/google";
@@ -352,7 +353,7 @@ const AuthForms = () => {
         disabled={isLoading}
       >
         {isLoading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color="#414042" />
         ) : (
           <Text style={styles.submitButtonText}>
             {isLogin ? "Login" : "Register"}
@@ -496,29 +497,29 @@ export default function LoginScreen() {
           <StatusBar style="auto" />
 
           <View style={styles.container}>
-            <Text style={styles.title}>Code with Beto</Text>
-
+            // add an image here
+            <Image
+              source={require("../assets/images/logo-grey.png")}
+              style={{ width: 250, height: 170, marginBottom: 40 }}
+            />
             {/* Manual Authentication Forms */}
             <AuthForms />
-
             {/* Divider */}
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
               <Text style={styles.dividerText}>OR</Text>
               <View style={styles.dividerLine} />
             </View>
-
             {/* Google Sign In */}
             {error && <Text style={styles.errorText}>{error}</Text>}
             <View style={styles.buttonContainer}>
               <Button
                 title={isLoading ? "Signing in..." : "Sign in with Google"}
                 onPress={handleGoogleSignIn}
-                color="#4285F4"
+                color="#414042"
                 disabled={!request || isLoading}
               />
             </View>
-
             {/* Debug Information */}
             {__DEV__ && (
               <Text style={styles.debugText}>
@@ -572,7 +573,7 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
   },
   submitButton: {
-    backgroundColor: "#4285F4",
+    backgroundColor: "#6dbe45",
     padding: 15,
     borderRadius: 5,
     marginTop: 10,
@@ -586,7 +587,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   switchButtonText: {
-    color: "#4285F4",
+    color: "#6dbe45",
     textAlign: "center",
   },
   buttonContainer: {
@@ -635,7 +636,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   toggleButtonActive: {
-    backgroundColor: "#4285F4",
+    backgroundColor: "#6dbe45",
   },
   toggleButtonText: {
     textAlign: "center",

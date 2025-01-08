@@ -27,7 +27,8 @@ To read more about using these font, please visit the Next.js documentation:
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { CardTitle, CardHeader, CardContent, Card } from "@/components/ui/card";
-import { Checkbox } from "antd";
+import { Checkbox, message } from "antd";
+import io from "socket.io-client";
 import AnnouncementModal from "@/components/component/AnnoucementModal";
 import {
   CalendarCheckIcon,
@@ -39,6 +40,12 @@ export default function Notifications() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [announcements, setAnnouncements] = useState([]);
   const [selectedAnnouncements, setSelectedAnnouncements] = useState([]);
+  const [socket, setSocket] = useState(null);
+  const [deleteAlert, setDeleteAlert] = useState({
+    visible: false,
+    message: "",
+    count: 0,
+  });
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -75,6 +82,49 @@ export default function Notifications() {
     }
   };
 
+  useEffect(() => {
+    // Initialize socket connection
+    const newSocket = io("http://localhost:5000", {
+      transports: ["websocket"],
+      reconnection: true,
+    });
+
+    // Set up socket event listeners
+    newSocket.on("connect", () => {
+      console.log("Connected to WebSocket server");
+    });
+
+    newSocket.on("disconnect", () => {
+      console.log("Disconnected from WebSocket server");
+    });
+
+    // Listen for new notifications
+    newSocket.on("newNotification", (notification) => {
+      setAnnouncements((prev) => [notification, ...prev]);
+      message.info("New notification received");
+    });
+
+    // Listen for deleted notifications
+    newSocket.on("notificationsDeleted", (deletedIds) => {
+      setAnnouncements((prev) =>
+        prev.filter((announcement) => !deletedIds.includes(announcement._id))
+      );
+      // Clear any selected items that were deleted
+      setSelectedAnnouncements((prev) =>
+        prev.filter((id) => !deletedIds.includes(id))
+      );
+    });
+
+    setSocket(newSocket);
+
+    // Cleanup on unmount
+    return () => {
+      if (newSocket) {
+        newSocket.disconnect();
+      }
+    };
+  }, []);
+
   const handleCreateAnnouncement = async (data) => {
     try {
       const response = await fetch("http://localhost:5000/api/notifications", {
@@ -87,17 +137,14 @@ export default function Notifications() {
 
       if (response.ok) {
         const newAnnouncement = await response.json();
-        setAnnouncements((prevAnnouncements) => [
-          ...prevAnnouncements,
-          newAnnouncement,
-        ]);
         setIsModalOpen(false);
-        console.log("New Announcement:", newAnnouncement);
+        message.success("Announcement created successfully");
       } else {
-        console.error("Error creating announcement:", response.statusText);
+        message.error("Error creating announcement");
       }
     } catch (error) {
       console.error("Error creating announcement:", error);
+      message.error("Error creating announcement");
     }
   };
 
@@ -115,20 +162,43 @@ export default function Notifications() {
       );
 
       if (response.ok) {
-        setAnnouncements((prevAnnouncements) =>
-          prevAnnouncements.filter(
-            (announcement) => !selectedAnnouncements.includes(announcement._id)
-          )
+        const deletedCount = selectedAnnouncements.length;
+        message.success(
+          `Successfully deleted ${deletedCount} notification${
+            deletedCount !== 1 ? "s" : ""
+          }`
         );
         setSelectedAnnouncements([]);
       } else {
-        console.error("Error deleting announcements:", response.statusText);
+        message.error("Error deleting notifications");
       }
     } catch (error) {
       console.error("Error deleting announcements:", error);
+      message.error("Error deleting notifications");
     }
   };
 
+  // Fetch initial announcements
+  useEffect(() => {
+    const fetchAnnouncements = async () => {
+      try {
+        const response = await fetch("http://localhost:5000/api/notifications");
+        if (response.ok) {
+          const data = await response.json();
+          setAnnouncements(data);
+        } else {
+          message.error("Error fetching announcements");
+        }
+      } catch (error) {
+        console.error("Error fetching announcements:", error);
+        message.error("Error fetching announcements");
+      }
+    };
+
+    fetchAnnouncements();
+  }, []);
+
+  // Rest of your component remains the same...
   const handleSelectAll = (e) => {
     if (e.target.checked) {
       setSelectedAnnouncements(announcements.map((a) => a._id));
@@ -168,32 +238,9 @@ export default function Notifications() {
     }
   }
 
-  useEffect(() => {
-    const fetchAnnouncements = async () => {
-      try {
-        const response = await fetch("http://localhost:5000/api/notifications");
-        if (response.ok) {
-          const data = await response.json();
-          setAnnouncements(data);
-          console.log("Fetched announcements:", data);
-        } else {
-          console.error("Error fetching announcements:", response.statusText);
-        }
-      } catch (error) {
-        console.error("Error fetching announcements:", error);
-      }
-    };
-
-    fetchAnnouncements();
-  }, []);
-
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      {" "}
-      {/* Add overflow-hidden */}
       <div className="flex-1 flex flex-col overflow-auto">
-        {" "}
-        {/* Add overflow-auto */}
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
           <div className="flex items-center justify-between">
             <Card className="w-full">
@@ -249,7 +296,7 @@ export default function Notifications() {
                   <div className="space-y-4">
                     {announcements.map((announcement) => (
                       <div
-                        key={announcement.id}
+                        key={announcement._id}
                         className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4"
                       >
                         <div className="flex items-start">

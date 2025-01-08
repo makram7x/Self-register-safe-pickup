@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Modal, Spin, notification, Drawer } from "antd";
+import { Modal, Spin, notification, Drawer, List, Table } from "antd";
 import { Button } from "@/components/ui/button";
 import {
   CardTitle,
@@ -11,14 +11,6 @@ import {
   CardContent,
   Card,
 } from "@/components/ui/card";
-import {
-  TableHead,
-  TableRow,
-  TableHeader,
-  TableCell,
-  TableBody,
-  Table,
-} from "@/components/ui/table";
 import {
   UsersIcon,
   ClockIcon,
@@ -40,14 +32,19 @@ import axios from "axios";
 import QRCodeGenerator from "@/components/component/QrGeneration";
 import WeatherWidget from "@/components/component/DynamicWeatherWidget";
 import RealtimePickupDrawer from "@/components/component/RealTimePickupDrawer";
+import PickupCharts from "@/components/component/PickupChart";
 import io from "socket.io-client";
 
 export default function Dashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // State variables
   const [studentCount, setStudentCount] = useState(0);
   const [parentCount, setParentCount] = useState(0);
+  const [announcementCount, setAnnouncementCount] = useState(0);
+  const [latestStudents, setLatestStudents] = useState([]);
+  const [latestAnnouncements, setLatestAnnouncements] = useState([]);
   const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] = useState(
     searchParams.get("drawer") === "true"
   );
@@ -59,7 +56,6 @@ export default function Dashboard() {
   const [pendingPickups, setPendingPickups] = useState([]);
   const [socket, setSocket] = useState(null);
   const [bgColor, setBgColor] = useState("white");
-  const [announcementCount, setAnnouncementCount] = useState(0);
   const [pickupStats, setPickupStats] = useState({
     activeCount: 0,
     delayedCount: 0,
@@ -68,11 +64,72 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
+    const fetchLatestStudents = async () => {
+      try {
+        const response = await axios.get(
+          "https://self-register-safe-pickup-production.up.railway.app/api/students"
+        );
+        // Get the last 3 students
+        setLatestStudents(response.data);
+      } catch (error) {
+        console.error("Error fetching latest students:", error);
+      }
+    };
+    fetchLatestStudents();
+  }, []);
+
+  // Fetch latest announcements
+  useEffect(() => {
+    const fetchLatestAnnouncements = async () => {
+      try {
+        const response = await axios.get(
+          "https://self-register-safe-pickup-production.up.railway.app/api/notifications"
+        );
+        // Get the last 4 announcements
+        setLatestAnnouncements(response.data.slice(-4));
+      } catch (error) {
+        console.error("Error fetching latest announcements:", error);
+      }
+    };
+    fetchLatestAnnouncements();
+  }, []);
+
+  // Socket initialization and stats update effects
+  useEffect(() => {
     console.log("Initializing socket connection...");
-    const newSocket = io("http://localhost:5000", {
-      transports: ["websocket"],
-      upgrade: false,
+    const newSocket = io(
+      "https://self-register-safe-pickup-production.up.railway.app",
+      {
+        transports: ["websocket"],
+        upgrade: false,
+      }
+    );
+
+    newSocket.on("connect", () => {
+      console.log("Socket connected:", newSocket.id);
     });
+
+    newSocket.on("connect_error", (error) => {
+      console.error("Socket connection error:", error);
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      console.log("Disconnecting socket...");
+      newSocket.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    console.log("Initializing socket connection...");
+    const newSocket = io(
+      "https://self-register-safe-pickup-production.up.railway.app",
+      {
+        transports: ["websocket"],
+        upgrade: false,
+      }
+    );
 
     newSocket.on("connect", () => {
       console.log("Socket connected:", newSocket.id);
@@ -96,10 +153,18 @@ export default function Dashboard() {
       try {
         console.log("Fetching initial stats...");
         const [active, delayed, completed, cancelled] = await Promise.all([
-          axios.get("http://localhost:5000/api/pickup/active/count"),
-          axios.get("http://localhost:5000/api/pickup/delayed/count"),
-          axios.get("http://localhost:5000/api/pickup/completed/count"),
-          axios.get("http://localhost:5000/api/pickup/cancelled/count"),
+          axios.get(
+            "https://self-register-safe-pickup-production.up.railway.app/api/pickup/active/count"
+          ),
+          axios.get(
+            "https://self-register-safe-pickup-production.up.railway.app/api/pickup/delayed/count"
+          ),
+          axios.get(
+            "https://self-register-safe-pickup-production.up.railway.app/api/pickup/completed/count"
+          ),
+          axios.get(
+            "https://self-register-safe-pickup-production.up.railway.app/api/pickup/cancelled/count"
+          ),
         ]);
 
         const newStats = {
@@ -189,8 +254,12 @@ export default function Dashboard() {
     const fetchSchoolData = async () => {
       try {
         const [studentRes, parentRes] = await Promise.all([
-          axios.get("http://localhost:5000/api/students/count"),
-          axios.get("http://localhost:5000/api/students/parent-count"),
+          axios.get(
+            "https://self-register-safe-pickup-production.up.railway.app/api/students/count"
+          ),
+          axios.get(
+            "https://self-register-safe-pickup-production.up.railway.app/api/students/parent-count"
+          ),
         ]);
 
         setStudentCount(studentRes.data.count);
@@ -207,7 +276,7 @@ export default function Dashboard() {
     const fetchAnnouncementCount = async () => {
       try {
         const response = await axios.get(
-          "http://localhost:5000/api/notifications"
+          "https://self-register-safe-pickup-production.up.railway.app/api/notifications"
         );
         setAnnouncementCount(response.data.length);
       } catch (error) {
@@ -275,7 +344,9 @@ export default function Dashboard() {
   // Fetch initial pending pickups
   const fetchPendingPickups = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/pickup/logs");
+      const response = await axios.get(
+        "https://self-register-safe-pickup-production.up.railway.app/api/pickup/logs"
+      );
       if (response.data.success) {
         const pending = response.data.data.filter(
           (pickup) => pickup.status === "pending"
@@ -332,7 +403,7 @@ export default function Dashboard() {
     try {
       setIsProcessing(true);
       const response = await axios.put(
-        `http://localhost:5000/api/pickup/${selectedPickup.id}/status`,
+        `https://self-register-safe-pickup-production.up.railway.app/api/pickup/${selectedPickup.id}/status`,
         {
           status: actionType,
           updatedBy: "admin", // You might want to pass actual admin ID here
@@ -399,7 +470,7 @@ export default function Dashboard() {
     const fetchStudentCount = async () => {
       try {
         const response = await axios.get(
-          "http://localhost:5000/api/students/count"
+          "https://self-register-safe-pickup-production.up.railway.app/api/students/count"
         );
         setStudentCount(response.data.count);
       } catch (error) {
@@ -408,17 +479,13 @@ export default function Dashboard() {
     };
 
     fetchStudentCount();
-    // fetchDelayedPickups();
-    // fetchActivePickups();
-    // fetchCompletedPickups();
-    // fetchCancelledPickups();
   }, []);
 
   useEffect(() => {
     const fetchParentCount = async () => {
       try {
         const response = await axios.get(
-          "http://localhost:5000/api/students/parent-count"
+          "https://self-register-safe-pickup-production.up.railway.app/api/students/parent-count"
         );
         setParentCount(response.data.count);
       } catch (error) {
@@ -527,152 +594,102 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <Card>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 ">
+            {/* Latest Students Card */}
+            <Card className="h-full flex flex-col">
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                 <CardTitle className="text-sm font-medium">
-                  Student Information
+                  Latest Students
                 </CardTitle>
-                <Button className="shrink-0" size="sm">
-                  Add Student
+                <Button
+                  className="shrink-0"
+                  size="sm"
+                  onClick={() => router.push("/student")}
+                >
+                  View All
                 </Button>
               </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Grade</TableHead>
-                      <TableHead>Parent</TableHead>
-                      <TableHead>Driver</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell className="font-medium">John Doe</TableCell>
-                      <TableCell>5th</TableCell>
-                      <TableCell>Jane Doe</TableCell>
-                      <TableCell>Bob Smith</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Jane Smith</TableCell>
-                      <TableCell>3rd</TableCell>
-                      <TableCell>John Smith</TableCell>
-                      <TableCell>Alice Johnson</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Michael Lee</TableCell>
-                      <TableCell>2nd</TableCell>
-                      <TableCell>Sarah Lee</TableCell>
-                      <TableCell>David Kim</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                <CardTitle className="text-sm font-medium">
-                  Announcements
-                </CardTitle>
-                <Button className="shrink-0" size="sm">
-                  New Announcement
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-medium">
-                        Early Dismissal on Friday
-                      </h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        Sent 2 hours ago
-                      </p>
-                    </div>
-                    <Button className="shrink-0" size="icon" variant="ghost">
-                      <DeleteIcon className="h-4 w-4" />
-                      <span className="sr-only">Edit announcement</span>
-                    </Button>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-medium">
-                        PTA Meeting Next Week
-                      </h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        Sent 1 day ago
-                      </p>
-                    </div>
-                    <Button className="shrink-0" size="icon" variant="ghost">
-                      <DeleteIcon className="h-4 w-4" />
-                      <span className="sr-only">Edit announcement</span>
-                    </Button>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-medium">
-                        School Closed Tomorrow
-                      </h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        Sent 3 days ago
-                      </p>
-                    </div>
-                    <Button className="shrink-0" size="icon" variant="ghost">
-                      <DeleteIcon className="h-4 w-4" />
-                      <span className="sr-only">Edit announcement</span>
-                    </Button>
-                  </div>
+              <CardContent className="p-0 flex-1">
+                {" "}
+                {/* Use flex-1 to take remaining space */}
+                <div className="h-[36rem] overflow-auto ml-4 mb-4 mt-2">
+                  {" "}
+                  {/* Full height container */}
+                  <Table
+                    dataSource={latestStudents}
+                    columns={[
+                      {
+                        title: "Student Name",
+                        dataIndex: "studentName",
+                        key: "studentName",
+                      },
+                      {
+                        title: "Grade",
+                        dataIndex: "grade",
+                        key: "grade",
+                      },
+                      {
+                        title: "Parent",
+                        dataIndex: "parentName",
+                        key: "parentName",
+                      },
+                    ]}
+                    pagination={false}
+                    size="small"
+                    scroll={{ y: true }}
+                    className="overflow-hidden"
+                  />
                 </div>
               </CardContent>
             </Card>
+
+            {/* Latest Announcements Card */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                 <CardTitle className="text-sm font-medium">
-                  Pick-up Process
+                  Latest Announcements
                 </CardTitle>
-                <Button className="shrink-0" size="sm">
-                  View Details
+                <Button
+                  className="shrink-0"
+                  size="sm"
+                  onClick={() => router.push("/notifications")}
+                >
+                  View All
                 </Button>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-medium">
-                        Dismissal Time: 3:00 PM
-                      </h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        Students begin lining up
-                      </p>
-                    </div>
-                    <div className="text-sm font-medium">
-                      <span className="text-green-500">On Schedule</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-medium">
-                        Parent Arrival: 3:15 PM
-                      </h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        Parents begin arriving
-                      </p>
-                    </div>
-                    <div className="text-sm font-medium">
-                      <span className="text-yellow-500">Delayed</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-medium">
-                        Student Pickup: 3:30 PM
-                      </h4>
-                    </div>
-                  </div>
-                </div>
+                <List
+                  itemLayout="horizontal"
+                  dataSource={latestAnnouncements}
+                  renderItem={(item) => (
+                    <List.Item
+                    // actions={[
+                    //   <Button
+                    //     key="delete"
+                    //     type="text"
+                    //     // icon={<DeleteIcon className="h-4 w-4" />}
+                    //   />,
+                    // ]}
+                    >
+                      <List.Item.Meta
+                        title={item.title}
+                        description={
+                          <div>
+                            <p className="text-sm">{item.description}</p>
+                            <p className="text-xs text-gray-500">
+                              {new Date(item.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                        }
+                      />
+                    </List.Item>
+                  )}
+                />
               </CardContent>
             </Card>
+          </div>
+          <div className="mb-6 mt-6">
+            <PickupCharts />
           </div>
         </div>
       </div>

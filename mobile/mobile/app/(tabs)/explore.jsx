@@ -1,4 +1,6 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import io from "socket.io-client";
+import { AppState } from "react-native";
 import {
   StyleSheet,
   FlatList,
@@ -11,11 +13,11 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Collapsible } from "../../components/Collapsible";
-import { ExternalLink } from "../../components/ExternalLink";
-import ParallaxScrollView from "../../components/ParallaxScrollView";
-import { ThemedText } from "../../components/ThemedText";
-import { ThemedView } from "../../components/ThemedView";
+// import { Collapsible } from "../../components/Collapsible";
+// import { ExternalLink } from "../../components/ExternalLink";
+// import ParallaxScrollView from "../../components/ParallaxScrollView";
+// import { ThemedText } from "../../components/ThemedText";
+// import { ThemedView } from "../../components/ThemedView";
 import {
   MegaphoneIcon,
   CalendarCheckIcon,
@@ -29,11 +31,57 @@ export default function NotificationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const navigation = useNavigation();
+  const socketRef = useRef(null);
+  const appState = useRef(AppState.currentState);
+
+  // Initialize Socket.IO connection
+  useEffect(() => {
+    // Create Socket.IO connection
+    socketRef.current = io(
+      "https://self-register-safe-pickup-production.up.railway.app",
+      {
+        transports: ["websocket"],
+        autoConnect: true,
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+      }
+    );
+
+    // Handle new notifications
+    socketRef.current.on("newNotification", (notification) => {
+      setNotifications((prev) => [notification, ...prev]);
+      setUnreadCount((prev) => prev + 1);
+    });
+
+    // Handle app state changes for reconnection
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === "active"
+      ) {
+        // App has come to foreground
+        if (!socketRef.current.connected) {
+          socketRef.current.connect();
+          fetchNotifications(); // Refresh notifications
+        }
+      }
+      appState.current = nextAppState;
+    });
+
+    // Clean up
+    return () => {
+      subscription.remove();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
 
   const fetchNotifications = useCallback(async () => {
     try {
       const response = await fetch(
-        "http://192.168.100.3:5000/api/notifications"
+        "https://self-register-safe-pickup-production.up.railway.app/api/notifications"
       );
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -81,6 +129,11 @@ export default function NotificationsScreen() {
         prev.map((n) => (n._id === notificationId ? { ...n, read: true } : n))
       );
       setUnreadCount((prev) => prev - 1);
+
+      // Emit to server that notification was read
+      if (socketRef.current) {
+        socketRef.current.emit("markAsRead", notificationId);
+      }
     } catch (error) {
       console.error("Error marking notification as read:", error);
     }

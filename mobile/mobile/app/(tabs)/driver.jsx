@@ -51,7 +51,7 @@ export default function DriversScreen() {
       }
 
       const response = await axios.get(
-        `http://192.168.100.3:5000/api/drivers/parent/${parentId}`
+        `https://self-register-safe-pickup-production.up.railway.app/api/drivers/parent/${parentId}`
       );
 
       if (response.data.success) {
@@ -116,7 +116,7 @@ export default function DriversScreen() {
       }
 
       const response = await axios.post(
-        "http://192.168.100.3:5000/api/drivers",
+        "https://self-register-safe-pickup-production.up.railway.app/api/drivers",
         {
           ...newDriver, // This will now have the complete form data
           parentId,
@@ -151,7 +151,7 @@ export default function DriversScreen() {
       try {
         setLoadingCode(true);
         const response = await axios.get(
-          `http://192.168.100.3:5000/api/drivers/${driver._id}/code`
+          `https://self-register-safe-pickup-production.up.railway.app/api/drivers/${driver._id}/code`
         );
 
         if (response.data.success) {
@@ -192,7 +192,7 @@ export default function DriversScreen() {
           onPress: async () => {
             try {
               const response = await axios.delete(
-                `http://192.168.100.3:5000/api/drivers/${driverId}`
+                `https://self-register-safe-pickup-production.up.railway.app/api/drivers/${driverId}`
               );
 
               if (response.data.success) {
@@ -309,7 +309,7 @@ export default function DriversScreen() {
        }
 
        const response = await axios.post(
-         "http://192.168.100.3:5000/api/drivers",
+         "https://self-register-safe-pickup-production.up.railway.app/api/drivers",
          {
            ...formData,
            parentId,
