@@ -10,30 +10,48 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
   const [unreadCount, setUnreadCount] = useState(0);
   const { user } = useAuth();
-
-  // Check if user is a driver
   const isDriver = Boolean(user?.isDriver);
 
   useEffect(() => {
-    const checkUnreadNotifications = async () => {
+    const fetchAndUpdateNotifications = async () => {
       try {
-        const notifications = await AsyncStorage.getItem("notifications");
+        // Fetch notifications from server
+        const response = await fetch(
+          "http://192.168.100.3:5000/api/notifications"
+        );
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const notifications = await response.json();
+
+        // Store notifications in AsyncStorage
+        await AsyncStorage.setItem(
+          "notifications",
+          JSON.stringify(notifications)
+        );
+
+        // Get read notifications from AsyncStorage
         const readNotifications = await AsyncStorage.getItem(
           "readNotifications"
         );
-        const allNotifications = JSON.parse(notifications) || [];
         const readSet = new Set(JSON.parse(readNotifications) || []);
-        const unreadCount = allNotifications.filter(
+
+        // Calculate unread count
+        const unreadCount = notifications.filter(
           (n) => !readSet.has(n._id)
         ).length;
         setUnreadCount(unreadCount);
       } catch (error) {
-        console.error("Error checking notifications:", error);
+        console.error("Error fetching notifications:", error);
       }
     };
 
-    checkUnreadNotifications();
-    const interval = setInterval(checkUnreadNotifications, 60000);
+    // Fetch immediately on mount
+    fetchAndUpdateNotifications();
+
+    // Set up interval for periodic updates
+    const interval = setInterval(fetchAndUpdateNotifications, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -76,7 +94,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabBarIcon name={focused ? "car" : "car-outline"} color={color} />
           ),
-          href: isDriver ? null : "/driver", // Hide tab for drivers by setting href to null
+          href: isDriver ? null : "/driver",
           tabBarStyle: isDriver ? { display: "none" } : undefined,
         }}
       />

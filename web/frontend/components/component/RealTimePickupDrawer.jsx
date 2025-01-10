@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
 import { Modal, notification } from "antd";
-import axios from "axios";
 import { Bell } from "lucide-react";
+import axios from "axios";
+import { useNotification } from "./NotificationProvider";
 
 const RealtimePickupDrawer = ({ isOpen, onClose, onPickupsUpdate }) => {
   const [pickups, setPickups] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [socket, setSocket] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [selectedPickup, setSelectedPickup] = useState(null);
   const [actionType, setActionType] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [api, contextHolder] = notification.useNotification();
+  const { socket } = useNotification();
+
+  // Base API URL from environment variable
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
   useEffect(() => {
     if (isOpen) {
@@ -21,115 +24,72 @@ const RealtimePickupDrawer = ({ isOpen, onClose, onPickupsUpdate }) => {
     }
   }, [isOpen]);
 
-  const showPickupNotification = (pickup) => {
-    notification.open({
-      message: (
-        <div className="flex items-center space-x-2">
-          <Bell className="h-5 w-5 text-blue-500" />
-          <span className="font-semibold">New Pickup Request</span>
-        </div>
-      ),
-      description: (
-        <div className="mt-2 space-y-1">
-          <div className="flex justify-between">
-            <span className="text-gray-500">Student:</span>
-            <span className="font-medium">{pickup.studentName}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-500">Parent:</span>
-            <span className="font-medium">{pickup.parentName}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-500">Code:</span>
-            <span className="font-mono bg-gray-100 px-2 rounded">
-              {pickup.studentCode}
-            </span>
-          </div>
-        </div>
-      ),
-      placement: "topRight",
-      duration: 6,
-      style: {
-        backgroundColor: "#ffffff",
-        borderRadius: "8px",
-        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-        border: "1px solid #e5e7eb",
-      },
-      className: "custom-notification",
-      btn: (
-        <Button
-          size="sm"
-          className="mt-2 bg-blue-500 hover:bg-blue-600 text-white"
-          onClick={() => {
-            // Close the notification and open the drawer if it's not already open
-            api.destroy();
-            if (!isOpen) {
-              onClose(false);
-            }
-          }}
-        >
-          View Details
-        </Button>
-      ),
-    });
-
-    // Play a notification sound
-    const audio = new Audio("/sounds/notification-sound.mp3"); // Make sure to add this file to your public folder
-    audio.play().catch((error) => console.log("Error playing sound:", error));
-  };
-
-  // Listen for real-time updates
+  // Socket effect handler
   useEffect(() => {
     if (!socket) return;
 
-    socket.on("new-pickup", (pickup) => {
-      const formattedPickup = {
-        id: pickup._id,
-        studentName: pickup.studentNames,
-        studentCode: pickup.studentCodes,
-        parentName: pickup.parent.name,
-        parentEmail: pickup.parent.email,
-        pickupTime: new Date(pickup.pickupTime).toLocaleString(),
-        status: pickup.status,
-      };
+    const handleNewPickup = (pickup) => {
+      console.log("New pickup received:", pickup);
+      if (pickup.status === "pending") {
+        const formattedPickup = {
+          id: pickup._id,
+          studentName: pickup.studentNames,
+          studentCode: pickup.studentCodes,
+          parentName: pickup.parent.name,
+          parentEmail: pickup.parent.email,
+          pickupTime: new Date(pickup.pickupTime).toLocaleString(),
+          status: pickup.status,
+        };
 
+        setPickups((prev) => {
+          const newPickups = [formattedPickup, ...prev];
+          onPickupsUpdate?.(newPickups);
+          return newPickups;
+        });
+      }
+    };
+
+    const handleStatusUpdate = ({ pickupId, status }) => {
+      console.log("Status update received:", { pickupId, status });
+      if (status !== "pending") {
+        setPickups((prev) => {
+          const updatedPickups = prev.filter((p) => p.id !== pickupId);
+          onPickupsUpdate?.(updatedPickups);
+          return updatedPickups;
+        });
+      }
+    };
+
+    const handlePickupDelete = (pickupId) => {
+      console.log("Pickup deletion received:", pickupId);
       setPickups((prev) => {
-        const newPickups = [formattedPickup, ...prev];
-        onPickupsUpdate(newPickups); // Update parent component
-        return newPickups;
+        const updatedPickups = prev.filter((p) => p.id !== pickupId);
+        onPickupsUpdate?.(updatedPickups);
+        return updatedPickups;
       });
-      showPickupNotification(formattedPickup);
-    });
+    };
 
-    socket.on("pickup-status-updated", ({ pickupId, status }) => {
-      setPickups((prev) =>
-        prev.map((pickup) =>
-          pickup.id === pickupId ? { ...pickup, status } : pickup
-        )
-      );
-    });
-
-    socket.on("pickup-deleted", (pickupId) => {
-      setPickups((prev) => prev.filter((pickup) => pickup.id !== pickupId));
-    });
+    socket.on("new-pickup", handleNewPickup);
+    socket.on("pickup-status-updated", handleStatusUpdate);
+    socket.on("pickup-deleted", handlePickupDelete);
 
     return () => {
-      socket.off("new-pickup");
-      socket.off("pickup-status-updated");
-      socket.off("pickup-deleted");
+      socket.off("new-pickup", handleNewPickup);
+      socket.off("pickup-status-updated", handleStatusUpdate);
+      socket.off("pickup-deleted", handlePickupDelete);
     };
   }, [socket]);
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchPendingPickups();
-    }
-  }, [isOpen]);
+  const showActionConfirmation = (pickup, type) => {
+    setSelectedPickup(pickup);
+    setActionType(type);
+    setShowConfirmModal(true);
+  };
 
   const fetchPendingPickups = async () => {
     try {
       setIsLoading(true);
-      const response = await axios.get("http://localhost:5000/api/pickup/logs");
+      const response = await axios.get(`${API_BASE_URL}/api/pickup/logs`);
 
       if (response.data.success) {
         const pendingPickups = response.data.data
@@ -145,19 +105,18 @@ const RealtimePickupDrawer = ({ isOpen, onClose, onPickupsUpdate }) => {
           }));
 
         setPickups(pendingPickups);
-        onPickupsUpdate(pendingPickups); // Update parent component
+        onPickupsUpdate?.(pendingPickups);
       }
     } catch (error) {
       console.error("Error fetching pending pickups:", error);
+      notification.error({
+        message: "Error",
+        description: "Failed to fetch pending pickups",
+        placement: "topRight",
+      });
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const showActionConfirmation = (pickup, type) => {
-    setSelectedPickup(pickup);
-    setActionType(type);
-    setShowConfirmModal(true);
   };
 
   const handlePickupStatus = async () => {
@@ -166,30 +125,32 @@ const RealtimePickupDrawer = ({ isOpen, onClose, onPickupsUpdate }) => {
     try {
       setIsProcessing(true);
       await axios.put(
-        `https://self-register-safe-pickup-production.up.railway.app/api/pickup/${selectedPickup.id}/status`,
+        `${API_BASE_URL}/api/pickup/${selectedPickup.id}/status`,
         {
           status: actionType,
           updatedBy: {
-            id: "507f1f77bcf86cd799439011", // A valid ObjectId format
+            id: "507f1f77bcf86cd799439011",
             name: "Admin User",
-            type: "staff", // Changed from 'admin' to 'staff' to match enum
+            type: "staff",
             email: "admin@example.com",
           },
           notes: `Pickup ${actionType} by admin at ${new Date().toISOString()}`,
         }
       );
 
-      // Show success notification
       notification.success({
         message: "Success",
         description: `Pickup ${actionType} successfully`,
         placement: "topRight",
       });
 
-      // Remove from local state if completed or cancelled
-      setPickups((prev) => prev.filter((p) => p.id !== selectedPickup.id));
+      setPickups((prev) => {
+        const updatedPickups = prev.filter((p) => p.id !== selectedPickup.id);
+        onPickupsUpdate?.(updatedPickups);
+        return updatedPickups;
+      });
     } catch (error) {
-      console.error(`Error updating pickup status:`, error);
+      console.error("Error updating pickup status:", error);
       notification.error({
         message: "Error",
         description: `Failed to ${actionType} pickup: ${
@@ -205,39 +166,8 @@ const RealtimePickupDrawer = ({ isOpen, onClose, onPickupsUpdate }) => {
     }
   };
 
-  const StatusConfirmationModal = () => (
-    <Modal
-      title={`Confirm ${actionType} Pickup`}
-      open={showConfirmModal}
-      onCancel={() => setShowConfirmModal(false)}
-      onOk={handlePickupStatus}
-      okText={actionType === "completed" ? "Complete Pickup" : "Cancel Pickup"}
-      okButtonProps={{
-        danger: actionType === "cancelled",
-        loading: isProcessing,
-      }}
-      cancelButtonProps={{ disabled: isProcessing }}
-    >
-      <p>Are you sure you want to {actionType} this pickup?</p>
-      {selectedPickup && (
-        <div className="mt-4 p-4 bg-gray-50 rounded">
-          <p>
-            <strong>Student:</strong> {selectedPickup.studentName}
-          </p>
-          <p>
-            <strong>Parent:</strong> {selectedPickup.parentName}
-          </p>
-          <p>
-            <strong>Pickup Time:</strong> {selectedPickup.pickupTime}
-          </p>
-        </div>
-      )}
-    </Modal>
-  );
-
   return (
     <>
-      {contextHolder}
       <div className="space-y-4">
         <div className="flex justify-between items-center mb-6">
           <div>
@@ -305,7 +235,36 @@ const RealtimePickupDrawer = ({ isOpen, onClose, onPickupsUpdate }) => {
           ))
         )}
       </div>
-      <StatusConfirmationModal />
+
+      <Modal
+        title={`Confirm ${actionType} Pickup`}
+        open={showConfirmModal}
+        onCancel={() => setShowConfirmModal(false)}
+        onOk={handlePickupStatus}
+        okText={
+          actionType === "completed" ? "Complete Pickup" : "Cancel Pickup"
+        }
+        okButtonProps={{
+          danger: actionType === "cancelled",
+          loading: isProcessing,
+        }}
+        cancelButtonProps={{ disabled: isProcessing }}
+      >
+        <p>Are you sure you want to {actionType} this pickup?</p>
+        {selectedPickup && (
+          <div className="mt-4 p-4 bg-gray-50 rounded">
+            <p>
+              <strong>Student:</strong> {selectedPickup.studentName}
+            </p>
+            <p>
+              <strong>Parent:</strong> {selectedPickup.parentName}
+            </p>
+            <p>
+              <strong>Pickup Time:</strong> {selectedPickup.pickupTime}
+            </p>
+          </div>
+        )}
+      </Modal>
     </>
   );
 };

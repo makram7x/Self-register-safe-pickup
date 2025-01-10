@@ -1,30 +1,36 @@
 const express = require("express");
-const router = express.Router();
-const QRCodeController = require("../controller/qrCodeController");
 const {
   validateQRCodeGeneration,
   validateQRCodeVerification,
 } = require("../middleware/qrCodeValidation");
 
-// Routes with validation middleware
-router.post(
-  "/generate",
-  validateQRCodeGeneration,
-  QRCodeController.generateQRCode
-);
+// Export a function that takes io as parameter
+module.exports = (io) => {
+  const router = express.Router();
 
-router.post(
-  "/verify",
-  validateQRCodeVerification,
-  QRCodeController.verifyQRCode
-);
+  // Get the controller instance with io
+  const QRCodeController = require("../controller/qrCodeController")(io);
 
-router.get("/history", QRCodeController.getQRCodeHistory);
+  // Routes with validation middleware
+  router.post(
+    "/generate",
+    validateQRCodeGeneration,
+    QRCodeController.generateQRCode
+  );
 
-router.get("/active", QRCodeController.getActiveQRCodes);
+  router.post(
+    "/verify",
+    validateQRCodeVerification,
+    QRCodeController.verifyQRCode
+  );
 
-router.patch("/:code/deactivate", QRCodeController.deactivateQRCode);
+  router.get("/history", QRCodeController.getQRCodeHistory);
 
-router.delete("/:code", QRCodeController.deleteQRCode);
+  router.get("/active", QRCodeController.getActiveQRCodes);
 
-module.exports = router;
+  router.patch("/:code/deactivate", QRCodeController.deactivateQRCode);
+
+  router.delete("/:code", QRCodeController.deleteQRCode);
+
+  return router;
+};

@@ -22,6 +22,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { QrCode, PlusCircle, LogOut, User } from "lucide-react-native";
 import QRScanner from "../../components/QRscanner";
 import PickupConfirmationModal from "../../components/PickupConfirmationModal";
+import io from "socket.io-client";
 
 export default function HomeScreen() {
   const [scanning, setScanning] = useState(false);
@@ -43,13 +44,82 @@ export default function HomeScreen() {
   const [lastScannedCode, setLastScannedCode] = useState(null);
   const [isAlertShowing, setIsAlertShowing] = useState(false);
   const [isAuthLoaded, setIsAuthLoaded] = useState(false);
-
+  const [socket, setSocket] = useState(null);
+  const [localActionInProgress, setLocalActionInProgress] = useState(false);
   const getParentId = () => {
     const userId = getUserId();
     return userId;
   };
 
-  // Modify handlePickupSubmit to update activePickup state
+  useEffect(() => {
+    if (user) {
+      const newSocket = io("http://192.168.100.3:5000", {
+        transports: ["websocket"],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+      });
+
+      newSocket.on("connect", () => {
+        console.log("Socket connected:", newSocket.id);
+      });
+
+      newSocket.on("connect_error", (error) => {
+        console.error("Socket connection error:", error);
+      });
+
+      setSocket(newSocket);
+
+      return () => {
+        if (newSocket) {
+          newSocket.disconnect();
+        }
+      };
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (socket && pendingPickupId) {
+      socket.emit("join-pickup", pendingPickupId);
+
+      socket.on("pickup-status-updated", ({ pickupId, status, pickup }) => {
+        if (
+          pickupId === pendingPickupId &&
+          (status === "completed" || status === "cancelled")
+        ) {
+          if (!localActionInProgress) {
+            const message =
+              status === "completed"
+                ? "Pickup has been completed successfully"
+                : "Pickup has been cancelled";
+
+            Alert.alert("Status Update", message, [
+              {
+                text: "OK",
+                onPress: () => resetPickupStates(),
+              },
+            ]);
+          }
+          resetPickupStates();
+        }
+      });
+
+      return () => {
+        socket.off("pickup-status-updated");
+        socket.emit("leave-pickup", pendingPickupId);
+      };
+    }
+  }, [socket, pendingPickupId, localActionInProgress]);
+
+  const resetPickupStates = () => {
+    setActivePickup(null);
+    setSelectedStudents([]);
+    setScannedPickupCode(null);
+    setPendingPickupId(null);
+    setShowConfirmationModal(false);
+    setLocalActionInProgress(false);
+  };
+
   const handlePickupSubmit = async () => {
     console.log("Current user object:", JSON.stringify(user, null, 2));
     if (selectedStudents.length === 0) {
@@ -58,7 +128,6 @@ export default function HomeScreen() {
     }
 
     try {
-      // Get user information
       const userData = user.data || user;
       const isDriverUser = userData.isDriver || userData.driver;
 
@@ -75,13 +144,11 @@ export default function HomeScreen() {
       };
 
       if (isDriverUser) {
-        // If user is a driver, include driver ID and parent info will be fetched by backend
         pickupData = {
           ...pickupData,
           driverId: userData.driver.id || userData.id,
         };
       } else {
-        // If user is a parent, include parent info directly
         pickupData = {
           ...pickupData,
           parent: {
@@ -92,10 +159,8 @@ export default function HomeScreen() {
         };
       }
 
-      console.log("Submitting pickup data:", pickupData); // Debug log
-
       const response = await axios.post(
-        "https://self-register-safe-pickup-production.up.railway.app/api/pickup",
+        "http://192.168.100.3:5000/api/pickup",
         pickupData
       );
 
@@ -128,75 +193,94 @@ export default function HomeScreen() {
     }
   };
 
-  // Modify submitPickupRequest to clear activePickup state
   const submitPickupRequest = async () => {
+    if (!pendingPickupId) {
+      Alert.alert("Error", "No pending pickup found");
+      return;
+    }
+
     setIsSubmittingPickup(true);
+    setLocalActionInProgress(true);
+
     try {
+      const userData = user.data || user;
+      const userType = userData.driver ? "driver" : "parent";
+      const userName = userData.name || userData.displayName;
+      const userId = userData.id || userData.driver?.id;
+
       const response = await axios.put(
         `http://192.168.100.3:5000/api/pickup/${pendingPickupId}/status`,
         {
           status: "completed",
-          updatedBy: user.data?.name || user.name || "Parent",
-          notes: "Pickup confirmed by parent",
+          updatedBy: {
+            id: userId,
+            name: userName,
+            type: userType,
+            email: userData.email,
+          },
+          notes: `Pickup completed by ${userType}`,
         }
       );
 
       if (response.data.success) {
-        setActivePickup(null);
-        Alert.alert("Success", "Pickup confirmed successfully", [
+        Alert.alert("Success", "Pickup completed successfully", [
           {
             text: "OK",
-            onPress: () => {
-              setShowConfirmationModal(false);
-              setSelectedStudents([]);
-              setScannedPickupCode(null);
-              setPendingPickupId(null);
-            },
+            onPress: resetPickupStates,
           },
         ]);
       } else {
-        Alert.alert("Error", response.data.message);
+        throw new Error(response.data.message || "Failed to complete pickup");
       }
     } catch (error) {
-      console.error(
-        "Pickup confirmation error:",
-        error.response?.data || error
-      );
+      console.error("Pickup completion error:", error);
       Alert.alert(
         "Error",
-        error.response?.data?.message || "Failed to confirm pickup"
+        error.response?.data?.message || "Failed to complete pickup"
       );
+      setLocalActionInProgress(false);
     } finally {
       setIsSubmittingPickup(false);
     }
   };
 
-  // Modify handleCancelPickup to clear activePickup state
   const handleCancelPickup = async () => {
+    setLocalActionInProgress(true);
+
     try {
+      const userData = user.data || user;
+      const userType = userData.driver ? "driver" : "parent";
+      const userName = userData.name || userData.displayName;
+      const userId = userData.id || userData.driver?.id;
+
       const response = await axios.put(
         `http://192.168.100.3:5000/api/pickup/${pendingPickupId}/status`,
         {
           status: "cancelled",
-          updatedBy: user.data?.name || user.name || "Parent",
-          notes: "Pickup cancelled by parent",
+          updatedBy: {
+            id: userId,
+            name: userName,
+            type: userType,
+            email: userData.email,
+          },
+          notes: `Pickup cancelled by ${userType}`,
         }
       );
 
       if (response.data.success) {
-        setActivePickup(null);
-        Alert.alert("Cancelled", "Pickup request has been cancelled");
+        Alert.alert("Cancelled", "Pickup request has been cancelled", [
+          {
+            text: "OK",
+            onPress: resetPickupStates,
+          },
+        ]);
       } else {
-        Alert.alert("Error", response.data.message);
+        throw new Error(response.data.message);
       }
     } catch (error) {
       console.error("Pickup cancellation error:", error);
       Alert.alert("Error", "Failed to cancel pickup");
-    } finally {
-      setShowConfirmationModal(false);
-      setSelectedStudents([]);
-      setScannedPickupCode(null);
-      setPendingPickupId(null);
+      setLocalActionInProgress(false);
     }
   };
 
@@ -219,7 +303,7 @@ export default function HomeScreen() {
       }
 
       const response = await axios.post(
-        "https://self-register-safe-pickup-production.up.railway.app/api/qr-codes/verify",
+        "http://192.168.100.3:5000/api/qr-codes/verify",
         {
           code: code,
           parentId: userId,
@@ -461,7 +545,7 @@ export default function HomeScreen() {
         // 6. Create the link
         try {
           const createLinkResponse = await axios.post(
-            "https://self-register-safe-pickup-production.up.railway.app/api/parent-student-links",
+            "http://192.168.100.3:5000/api/parent-student-links",
             {
               parentId: userId,
               uniqueCode: trimmedCode,
@@ -1248,12 +1332,10 @@ const styles = StyleSheet.create({
     flex: 1,
     marginBottom: 20,
   },
-
-  // sectionTitle: {
-  //   fontSize: 18,
-  //   fontWeight: "600",
-  // },
-
+  disabledButton: {
+    backgroundColor: "#cccccc",
+    opacity: 0.7,
+  },
   addButton: {
     flexDirection: "row",
     alignItems: "center",

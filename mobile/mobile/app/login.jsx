@@ -252,10 +252,12 @@ const AuthForms = () => {
               }
               keyboardType="email-address"
               autoCapitalize="none"
+              placeholderTextColor="gray"
             />
             <TextInput
               style={styles.input}
               placeholder="Password"
+              placeholderTextColor="gray"
               value={formData.password}
               onChangeText={(text) =>
                 setFormData((prev) => ({ ...prev, password: text }))
@@ -269,6 +271,7 @@ const AuthForms = () => {
             <TextInput
               style={styles.input}
               placeholder="Verification Code"
+              placeholderTextColor="gray"
               value={formData.verificationCode}
               onChangeText={(text) =>
                 setFormData((prev) => ({
@@ -281,6 +284,7 @@ const AuthForms = () => {
             <TextInput
               style={styles.input}
               placeholder="Set Password"
+              placeholderTextColor="gray"
               value={formData.password}
               onChangeText={(text) =>
                 setFormData((prev) => ({ ...prev, password: text }))
@@ -290,6 +294,7 @@ const AuthForms = () => {
             <TextInput
               style={styles.input}
               placeholder="Confirm Password"
+              placeholderTextColor="gray"
               value={formData.confirmPassword}
               onChangeText={(text) =>
                 setFormData((prev) => ({ ...prev, confirmPassword: text }))
@@ -305,6 +310,7 @@ const AuthForms = () => {
             <TextInput
               style={styles.input}
               placeholder="Full Name"
+              placeholderTextColor="gray"
               value={formData.name}
               onChangeText={(text) =>
                 setFormData((prev) => ({ ...prev, name: text }))
@@ -315,6 +321,7 @@ const AuthForms = () => {
           <TextInput
             style={styles.input}
             placeholder="Email"
+            placeholderTextColor="gray"
             value={formData.email}
             onChangeText={(text) =>
               setFormData((prev) => ({ ...prev, email: text }))
@@ -325,6 +332,7 @@ const AuthForms = () => {
           <TextInput
             style={styles.input}
             placeholder="Password"
+            placeholderTextColor="gray"
             value={formData.password}
             onChangeText={(text) =>
               setFormData((prev) => ({ ...prev, password: text }))
@@ -335,6 +343,7 @@ const AuthForms = () => {
             <TextInput
               style={styles.input}
               placeholder="Confirm Password"
+              placeholderTextColor="gray"
               value={formData.confirmPassword}
               onChangeText={(text) =>
                 setFormData((prev) => ({ ...prev, confirmPassword: text }))
@@ -571,6 +580,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     borderWidth: 1,
     borderColor: "#ddd",
+    color: "#333",
   },
   submitButton: {
     backgroundColor: "#6dbe45",

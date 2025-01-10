@@ -45,12 +45,39 @@ function StudentPickupDisplay() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const audioRef = useRef(null);
 
+  // Initialize socket connection with improved error handling
   useEffect(() => {
-    const newSocket = io("https://self-register-safe-pickup-production.up.railway.app");
-    setSocket(newSocket);
-    return () => newSocket.disconnect();
+    const newSocket = io("http://localhost:5000", {
+      transports: ["websocket"],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+
+    newSocket.on("connect", () => {
+      console.log("Socket connected successfully");
+      setSocket(newSocket);
+    });
+
+    newSocket.on("disconnect", () => {
+      console.log("Socket disconnected");
+    });
+
+    newSocket.on("connect_error", (error) => {
+      console.error("Socket connection error:", error);
+      // Attempt to reconnect on error
+      setTimeout(() => {
+        newSocket.connect();
+      }, 1000);
+    });
+
+    return () => {
+      console.log("Cleaning up socket connection");
+      newSocket.disconnect();
+    };
   }, []);
 
+  // Update current time
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -58,9 +85,10 @@ function StudentPickupDisplay() {
     return () => clearInterval(timer);
   }, []);
 
+  // Fetch pending pickups from API
   const fetchPendingPickups = async () => {
     try {
-      const response = await axios.get("https://self-register-safe-pickup-production.up.railway.app/api/pickup/logs");
+      const response = await axios.get("http://localhost:5000/api/pickup/logs");
       if (response.data.success) {
         const pending = response.data.data
           .filter((pickup) => pickup.status === "pending")
@@ -73,6 +101,7 @@ function StudentPickupDisplay() {
               (new Date() - new Date(pickup.pickupTime)) / 60000
             ),
           }));
+        console.log("Fetched pending pickups:", pending);
         setPendingPickups(pending);
       }
     } catch (error) {
@@ -80,26 +109,48 @@ function StudentPickupDisplay() {
     }
   };
 
+  // Setup socket event listeners with improved handling
   useEffect(() => {
-    fetchPendingPickups();
-    const setupSocketListeners = () => {
+    console.log(
+      "Setting up socket listeners, socket state:",
+      socket ? "connected" : "disconnected"
+    );
+
+    const setupListeners = () => {
       if (!socket) return;
 
+      // Initial fetch
+      fetchPendingPickups();
+
+      // Set up listeners
       socket.on("new-pickup", handleNewPickup);
       socket.on("pickup-status-updated", handleStatusUpdate);
       socket.on("pickup-deleted", handlePickupDelete);
 
-      return () => {
-        socket.off("new-pickup");
-        socket.off("pickup-status-updated");
-        socket.off("pickup-deleted");
-      };
+      // Setup reconnect handler
+      socket.on("reconnect", () => {
+        console.log("Socket reconnected, fetching latest data");
+        fetchPendingPickups();
+      });
+
+      console.log("Socket listeners setup complete");
     };
 
-    const cleanup = setupSocketListeners();
-    return () => cleanup && cleanup();
+    setupListeners();
+
+    // Cleanup function
+    return () => {
+      if (socket) {
+        console.log("Cleaning up socket listeners");
+        socket.off("new-pickup", handleNewPickup);
+        socket.off("pickup-status-updated", handleStatusUpdate);
+        socket.off("pickup-deleted", handlePickupDelete);
+        socket.off("reconnect");
+      }
+    };
   }, [socket]);
 
+  // Initialize audio for notifications
   useEffect(() => {
     audioRef.current = new Audio("/notification-sound.mp3");
   }, []);
@@ -110,7 +161,9 @@ function StudentPickupDisplay() {
     }
   };
 
+  // Event handlers with improved logging
   const handleNewPickup = (pickup) => {
+    console.log("Received new pickup:", pickup);
     if (pickup.status === "pending") {
       const newPickup = {
         id: pickup._id,
@@ -119,19 +172,34 @@ function StudentPickupDisplay() {
         requestTime: new Date(pickup.pickupTime),
         waitTime: 0,
       };
-      setPendingPickups((prev) => [...prev, newPickup]);
+      console.log("Adding new pickup to state:", newPickup);
+      setPendingPickups((prev) => {
+        const updated = [...prev, newPickup];
+        console.log("Updated pending pickups:", updated);
+        return updated;
+      });
       playNotificationSound();
     }
   };
 
   const handleStatusUpdate = ({ pickupId, status }) => {
+    console.log("Received status update:", { pickupId, status });
     if (status !== "pending") {
-      setPendingPickups((prev) => prev.filter((p) => p.id !== pickupId));
+      setPendingPickups((prev) => {
+        const updated = prev.filter((p) => p.id !== pickupId);
+        console.log("Updated pending pickups after status change:", updated);
+        return updated;
+      });
     }
   };
 
   const handlePickupDelete = (pickupId) => {
-    setPendingPickups((prev) => prev.filter((p) => p.id !== pickupId));
+    console.log("Received pickup delete:", pickupId);
+    setPendingPickups((prev) => {
+      const updated = prev.filter((p) => p.id !== pickupId);
+      console.log("Updated pending pickups after deletion:", updated);
+      return updated;
+    });
   };
 
   const getTimeDisplay = (date) => {
@@ -168,48 +236,50 @@ function StudentPickupDisplay() {
 
       <div className="p-4 w-screen">
         <Row gutter={[16, 16]} className="w-full" style={{ margin: 0 }}>
-          {pendingPickups.map((pickup) => (
-            <Col key={pickup.id} span={3}>
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.3 }}
-              >
-                <Card
-                  className="text-center h-32 w-full"
-                  bodyStyle={{
-                    height: "100%",
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "center",
-                    padding: "12px",
-                  }}
+          <AnimatePresence>
+            {pendingPickups.map((pickup) => (
+              <Col key={pickup.id} span={3}>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <div className="flex flex-col items-center justify-center space-y-4">
-                    <div className="text-lg font-semibold truncate w-full">
-                      {pickup.studentName}
+                  <Card
+                    className="text-center h-32 w-full"
+                    bodyStyle={{
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "center",
+                      padding: "12px",
+                    }}
+                  >
+                    <div className="flex flex-col items-center justify-center space-y-4">
+                      <div className="text-lg font-semibold truncate w-full">
+                        {pickup.studentName}
+                      </div>
+                      <Badge
+                        count={`${calculateWaitTime(pickup.requestTime)}m`}
+                        style={{
+                          backgroundColor:
+                            calculateWaitTime(pickup.requestTime) > 15
+                              ? "#ff4d4f"
+                              : calculateWaitTime(pickup.requestTime) > 10
+                              ? "#faad14"
+                              : "#52c41a",
+                          fontSize: "16px",
+                          padding: "0 12px",
+                          height: "24px",
+                          borderRadius: "12px",
+                        }}
+                      />
                     </div>
-                    <Badge
-                      count={`${calculateWaitTime(pickup.requestTime)}m`}
-                      style={{
-                        backgroundColor:
-                          calculateWaitTime(pickup.requestTime) > 15
-                            ? "#ff4d4f"
-                            : calculateWaitTime(pickup.requestTime) > 10
-                            ? "#faad14"
-                            : "#52c41a",
-                        fontSize: "16px",
-                        padding: "0 12px",
-                        height: "24px",
-                        borderRadius: "12px",
-                      }}
-                    />
-                  </div>
-                </Card>
-              </motion.div>
-            </Col>
-          ))}
+                  </Card>
+                </motion.div>
+              </Col>
+            ))}
+          </AnimatePresence>
         </Row>
       </div>
 

@@ -56,7 +56,7 @@ const pickupSchema = new Schema(
       phone: String,
       type: {
         type: String,
-        enum: ["driver", "staff", "admin"], // Added "admin" to valid types
+        enum: ["parent", "driver", "staff", "admin"], // Added "admin" to valid types
       },
       verificationCode: String,
     },

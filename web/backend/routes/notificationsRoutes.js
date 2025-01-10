@@ -10,7 +10,7 @@ const createNotificationRoutes = (io) => {
   router.get("/", async (req, res) => {
     try {
       const notifications = await Notifications.find().sort({ createdAt: -1 });
-      console.log("Retrieved notifications:", notifications);
+      // console.log("Retrieved notifications:", notifications);
       res.json(notifications);
     } catch (error) {
       console.error("Error retrieving notifications:", error);

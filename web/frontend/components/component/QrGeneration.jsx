@@ -36,7 +36,7 @@ const QrGeneration = () => {
 
   // Update socket event handler
   useEffect(() => {
-    socketRef.current = io("https://self-register-safe-pickup-production.up.railway.app", {
+    socketRef.current = io("http://localhost:5000", {
       withCredentials: true,
     });
 
@@ -57,7 +57,7 @@ const QrGeneration = () => {
 
   // Initialize Socket.IO connection
   useEffect(() => {
-    socketRef.current = io("https://self-register-safe-pickup-production.up.railway.app", {
+    socketRef.current = io("http://localhost:5000", {
       withCredentials: true,
     });
 
@@ -79,7 +79,7 @@ const QrGeneration = () => {
   const fetchActiveQRCodes = async () => {
     try {
       const response = await axios.get(
-        "https://self-register-safe-pickup-production.up.railway.app/api/qr-codes/active",
+        "http://localhost:5000/api/qr-codes/active",
         {
           params: { schoolId: "123" },
         }
@@ -104,7 +104,7 @@ const QrGeneration = () => {
   const fetchQRHistory = async () => {
     try {
       const response = await axios.get(
-        "https://self-register-safe-pickup-production.up.railway.app/api/qr-codes/history",
+        "http://localhost:5000/api/qr-codes/history",
         {
           params: { schoolId: "123" },
         }
@@ -139,7 +139,7 @@ const QrGeneration = () => {
       const currentDate = new Date().toISOString();
 
       const response = await axios.post(
-        "https://self-register-safe-pickup-production.up.railway.app/api/qr-codes/generate",
+        "http://localhost:5000/api/qr-codes/generate",
         {
           schoolId: "123",
           timestamp: currentDate,
@@ -218,7 +218,7 @@ const QrGeneration = () => {
   const deactivateQR = async (qrCode) => {
     try {
       const response = await axios.patch(
-        `https://self-register-safe-pickup-production.up.railway.app/api/qr-codes/${qrCode.code}/deactivate`
+        `http://localhost:5000/api/qr-codes/${qrCode.code}/deactivate`
       );
 
       if (response.data.success) {
@@ -370,7 +370,7 @@ const QrGeneration = () => {
   const deleteQR = async (qrCode) => {
     try {
       const response = await axios.delete(
-        `https://self-register-safe-pickup-production.up.railway.app/api/qr-codes/${qrCode.code}`
+        `http://localhost:5000/api/qr-codes/${qrCode.code}`
       );
 
       if (response.data.success) {

@@ -74,7 +74,7 @@ const generateUniqueCodes = async (req, res) => {
     return res.status(200).json({
       success: true,
       updatedStudents,
-      errors: errors.length > 0 ? errors : undefined,
+      errors: errors.length > 0 ? errors : null,
       message:
         errors.length > 0
           ? `Generated ${updatedStudents.length} codes with ${errors.length} errors`

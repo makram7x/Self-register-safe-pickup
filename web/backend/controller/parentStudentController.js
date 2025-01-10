@@ -246,6 +246,32 @@ const deleteAllLinks = async (req, res) => {
   }
 };
 
+const getLinksByStudentCode = async (req, res) => {
+  try {
+    const { uniqueCode } = req.params;
+    console.log("Finding links for student code:", uniqueCode);
+
+    const links = await ParentStudentLink.find({
+      "studentInfo.uniqueCode": uniqueCode,
+    });
+
+    console.log("Found links:", links);
+
+    res.status(200).json({
+      success: true,
+      links: links,
+      count: links.length,
+    });
+  } catch (error) {
+    console.error("Error finding links by student code:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error finding parent-student links",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getParentLinks,
   createLink,
@@ -253,4 +279,5 @@ module.exports = {
   verifyLink,
   debugLinks,
   deleteAllLinks,
+  getLinksByStudentCode,
 };

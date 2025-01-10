@@ -13,8 +13,8 @@ const connectDB = async () => {
     const connectWithRetry = async () => {
       try {
         mongoose.connect(process.env.DB_URI, {
-          useNewUrlParser: true,
-          useUnifiedTopology: true,
+          // useNewUrlParser: true,
+          // useUnifiedTopology: true,
           serverSelectionTimeoutMS: 5000,
           family: 4, // Force IPv4
         });

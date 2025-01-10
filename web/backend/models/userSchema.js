@@ -23,9 +23,8 @@ const userSchema = new Schema(
     },
     googleId: {
       type: String,
-      sparse: true, // This allows multiple null values
-      unique: true, // But ensures unique googleIds when present
-      default: null,
+      default: undefined, // Changed from null to undefined
+      sparse: true,
     },
     authType: {
       type: String,
@@ -47,11 +46,16 @@ const userSchema = new Schema(
   }
 );
 
-// Remove any existing indexes to prevent conflicts
+// Modified pre-save middleware
 userSchema.pre("save", async function (next) {
   try {
-    if (this.authType === "email") {
-      this.googleId = null; // Ensure googleId is null for email users
+    if (this.isNew) {
+      // Only run on new document creation
+      if (this.authType === "email") {
+        this.googleId = undefined; // Use undefined instead of null
+      } else if (this.authType === "google" && !this.googleId) {
+        throw new Error("Google ID is required for Google authentication");
+      }
     }
     next();
   } catch (error) {
@@ -59,15 +63,14 @@ userSchema.pre("save", async function (next) {
   }
 });
 
-// Compound index to ensure unique combinations
-userSchema.index({ email: 1 });
+// Removed the separate index declarations and combined them
+userSchema.index({ email: 1 }, { unique: true });
 userSchema.index(
+  { googleId: 1 },
   {
-    googleId: 1,
-  },
-  {
-    sparse: true, // This is crucial for allowing multiple null values
-    unique: true, // While maintaining uniqueness for non-null values
+    sparse: true,
+    unique: true,
+    partialFilterExpression: { googleId: { $exists: true } }, // Added partial filter
   }
 );
 

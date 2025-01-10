@@ -14,6 +14,7 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   SafeAreaView,
+  Clipboard,
 } from "react-native";
 import axios from "axios";
 import { useAuth } from "../../contexts/AuthContext";
@@ -118,7 +119,7 @@ export default function DriversScreen() {
       const response = await axios.post(
         "https://self-register-safe-pickup-production.up.railway.app/api/drivers",
         {
-          ...newDriver, // This will now have the complete form data
+          ...newDriver,
           parentId,
         }
       );
@@ -126,9 +127,19 @@ export default function DriversScreen() {
       if (response.data.success) {
         setDrivers((prev) => [...prev, response.data.data.driver]);
         handleAddDriverModal(false);
+
+        // Show alert with copy option
         Alert.alert(
           "Success",
-          `Driver added successfully!\n\nVerification Code: ${response.data.data.verificationCode}\n\nPlease share this code with your driver to complete registration.`
+          `Driver added successfully!\n\nVerification Code: ${response.data.data.verificationCode}\n\nUse this code to complete registration.`,
+          [
+            {
+              text: "Copy Code",
+              onPress: () =>
+                copyToClipboard(response.data.data.verificationCode),
+            },
+            { text: "OK" },
+          ]
         );
       }
     } catch (error) {
@@ -142,35 +153,35 @@ export default function DriversScreen() {
     }
   };
 
-    const handleDriverPress = async (driver) => {
-      if (driver.isRegistered) {
-        Alert.alert("Driver Status", "This driver is already registered.");
-        return;
-      }
+  const handleDriverPress = async (driver) => {
+    if (driver.isRegistered) {
+      Alert.alert("Driver Status", "This driver is already registered.");
+      return;
+    }
 
-      try {
-        setLoadingCode(true);
-        const response = await axios.get(
-          `https://self-register-safe-pickup-production.up.railway.app/api/drivers/${driver._id}/code`
-        );
+    try {
+      setLoadingCode(true);
+      const response = await axios.get(
+        `https://self-register-safe-pickup-production.up.railway.app/api/drivers/${driver._id}/code`
+      );
 
-        if (response.data.success) {
-          setSelectedDriver(driver);
-          setVerificationCode(response.data.verificationCode);
-          setShowVerificationModal(true);
-        } else {
-          Alert.alert("Error", "Could not retrieve verification code");
-        }
-      } catch (error) {
-        console.error("Error fetching verification code:", error);
-        Alert.alert(
-          "Error",
-          error.response?.data?.message || "Failed to fetch verification code"
-        );
-      } finally {
-        setLoadingCode(false);
+      if (response.data.success) {
+        setSelectedDriver(driver);
+        setVerificationCode(response.data.verificationCode);
+        setShowVerificationModal(true);
+      } else {
+        Alert.alert("Error", "Could not retrieve verification code");
       }
-    };
+    } catch (error) {
+      console.error("Error fetching verification code:", error);
+      Alert.alert(
+        "Error",
+        error.response?.data?.message || "Failed to fetch verification code"
+      );
+    } finally {
+      setLoadingCode(false);
+    }
+  };
   const closeVerificationModal = () => {
     setShowVerificationModal(false);
     setTimeout(() => {
@@ -260,195 +271,205 @@ export default function DriversScreen() {
   );
 
   // Modal Components
- const AddDriverModal = () => {
-   // Local state for form inputs and loading
-   const [formData, setFormData] = useState({
-     name: "",
-     email: "",
-     phone: "",
-   });
-   const [localSubmitting, setLocalSubmitting] = useState(false);
+  const AddDriverModal = () => {
+    // Local state for form inputs and loading
+    const [formData, setFormData] = useState({
+      name: "",
+      email: "",
+      phone: "",
+    });
+    const [localSubmitting, setLocalSubmitting] = useState(false);
 
-   // Reset form when modal closes
-   useEffect(() => {
-     if (!showAddModal) {
-       setFormData({ name: "", email: "", phone: "" });
-       setLocalSubmitting(false);
-     }
-   }, [showAddModal]);
+    // Reset form when modal closes
+    useEffect(() => {
+      if (!showAddModal) {
+        setFormData({ name: "", email: "", phone: "" });
+        setLocalSubmitting(false);
+      }
+    }, [showAddModal]);
 
-   const validateFormData = () => {
-     if (!formData.name.trim()) {
-       Alert.alert("Error", "Please enter driver's name");
-       return false;
-     }
-     if (!formData.email.trim()) {
-       Alert.alert("Error", "Please enter driver's email");
-       return false;
-     }
-     if (!formData.phone.trim()) {
-       Alert.alert("Error", "Please enter driver's phone number");
-       return false;
-     }
-     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-     if (!emailRegex.test(formData.email.trim())) {
-       Alert.alert("Error", "Please enter a valid email address");
-       return false;
-     }
-     return true;
-   };
+    const validateFormData = () => {
+      if (!formData.name.trim()) {
+        Alert.alert("Error", "Please enter driver's name");
+        return false;
+      }
+      if (!formData.email.trim()) {
+        Alert.alert("Error", "Please enter driver's email");
+        return false;
+      }
+      if (!formData.phone.trim()) {
+        Alert.alert("Error", "Please enter driver's phone number");
+        return false;
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email.trim())) {
+        Alert.alert("Error", "Please enter a valid email address");
+        return false;
+      }
+      return true;
+    };
 
-   const handleSubmit = async () => {
-     if (!validateFormData() || localSubmitting) return;
+    const handleSubmit = async () => {
+      if (!validateFormData() || localSubmitting) return;
 
-     setLocalSubmitting(true);
-     try {
-       const parentId = user.data?.id || user.id;
-       if (!parentId) {
-         throw new Error("Parent ID not found");
-       }
+      setLocalSubmitting(true);
+      try {
+        const parentId = user.data?.id || user.id;
+        if (!parentId) {
+          throw new Error("Parent ID not found");
+        }
 
-       const response = await axios.post(
-         "https://self-register-safe-pickup-production.up.railway.app/api/drivers",
-         {
-           ...formData,
-           parentId,
-         }
-       );
+        const response = await axios.post(
+          "https://self-register-safe-pickup-production.up.railway.app/api/drivers",
+          {
+            ...formData,
+            parentId,
+          }
+        );
 
-       if (response.data.success) {
-         // Update drivers list using a callback to ensure we have latest state
-         setDrivers((currentDrivers) => [
-           ...currentDrivers,
-           response.data.data.driver,
-         ]);
+        if (response.data.success) {
+          // Update drivers list using a callback to ensure we have latest state
+          setDrivers((currentDrivers) => [
+            ...currentDrivers,
+            response.data.data.driver,
+          ]);
 
-         // Close modal first
-         handleAddDriverModal(false);
+          // Close modal first
+          handleAddDriverModal(false);
 
-         // Show success alert after a brief delay to ensure smooth transition
-         setTimeout(() => {
-           Alert.alert(
-             "Success",
-             `Driver added successfully!\n\nVerification Code: ${response.data.data.verificationCode}\n\nPlease share this code with your driver to complete registration.`
-           );
-         }, 100);
-       }
-     } catch (error) {
-       console.error("Error adding driver:", error);
-       Alert.alert(
-         "Error",
-         error.response?.data?.message || "Failed to add driver"
-       );
-     } finally {
-       setLocalSubmitting(false);
-     }
-   };
+          // Show success alert after a brief delay to ensure smooth transition
+          setTimeout(() => {
+            Alert.alert(
+              "Success",
+              `Driver added successfully!\n\nVerification Code: ${response.data.data.verificationCode}\n\nPlease share this code with your driver to complete registration.`
+            );
+          }, 100);
+        }
+      } catch (error) {
+        console.error("Error adding driver:", error);
+        Alert.alert(
+          "Error",
+          error.response?.data?.message || "Failed to add driver"
+        );
+      } finally {
+        setLocalSubmitting(false);
+      }
+    };
 
-   return (
-     <Modal
-       visible={showAddModal}
-       animationType="slide"
-       transparent={true}
-       onRequestClose={() => !localSubmitting && handleAddDriverModal(false)}
-     >
-       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-         <View style={styles.modalContainer}>
-           <KeyboardAvoidingView
-             behavior={Platform.OS === "ios" ? "padding" : "height"}
-             style={{ flex: 1 }}
-             keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
-           >
-             <View style={styles.modalOverlayDriver}>
-               <View style={[styles.modalContent, { maxHeight: "95%" }]}>
-                 <View style={styles.modalHeader}>
-                   <Text style={styles.modalTitle}>Add New Driver</Text>
-                   <TouchableOpacity
-                     style={styles.closeButton}
-                     onPress={() =>
-                       !localSubmitting && handleAddDriverModal(false)
-                     }
-                     disabled={localSubmitting}
-                   >
-                     <X size={24} color="#666" />
-                   </TouchableOpacity>
-                 </View>
+    return (
+      <Modal
+        visible={showAddModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => !localSubmitting && handleAddDriverModal(false)}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalContainer}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              style={{ flex: 1 }}
+              keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+            >
+              <View style={styles.modalOverlayDriver}>
+                <View style={[styles.modalContent, { maxHeight: "95%" }]}>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Add New Driver</Text>
+                    <TouchableOpacity
+                      style={styles.closeButton}
+                      onPress={() =>
+                        !localSubmitting && handleAddDriverModal(false)
+                      }
+                      disabled={localSubmitting}
+                    >
+                      <X size={24} color="#666" />
+                    </TouchableOpacity>
+                  </View>
 
-                 <ScrollView
-                   keyboardShouldPersistTaps="handled"
-                   contentContainerStyle={{ paddingBottom: 20 }}
-                 >
-                   <TextInput
-                     style={[
-                       styles.input,
-                       localSubmitting && styles.inputDisabled,
-                     ]}
-                     placeholder="Driver Name"
-                     value={formData.name}
-                     onChangeText={(text) =>
-                       setFormData((prev) => ({ ...prev, name: text }))
-                     }
-                     placeholderTextColor="#999"
-                     returnKeyType="next"
-                     editable={!localSubmitting}
-                   />
+                  <ScrollView
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={{ paddingBottom: 20 }}
+                  >
+                    <TextInput
+                      style={[
+                        styles.input,
+                        localSubmitting && styles.inputDisabled,
+                      ]}
+                      placeholder="Driver Name"
+                      value={formData.name}
+                      onChangeText={(text) =>
+                        setFormData((prev) => ({ ...prev, name: text }))
+                      }
+                      placeholderTextColor="#999"
+                      returnKeyType="next"
+                      editable={!localSubmitting}
+                    />
 
-                   <TextInput
-                     style={[
-                       styles.input,
-                       localSubmitting && styles.inputDisabled,
-                     ]}
-                     placeholder="Email"
-                     value={formData.email}
-                     onChangeText={(text) =>
-                       setFormData((prev) => ({ ...prev, email: text }))
-                     }
-                     keyboardType="email-address"
-                     autoCapitalize="none"
-                     placeholderTextColor="#999"
-                     returnKeyType="next"
-                     editable={!localSubmitting}
-                   />
+                    <TextInput
+                      style={[
+                        styles.input,
+                        localSubmitting && styles.inputDisabled,
+                      ]}
+                      placeholder="Email"
+                      value={formData.email}
+                      onChangeText={(text) =>
+                        setFormData((prev) => ({ ...prev, email: text }))
+                      }
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      placeholderTextColor="#999"
+                      returnKeyType="next"
+                      editable={!localSubmitting}
+                    />
 
-                   <TextInput
-                     style={[
-                       styles.input,
-                       localSubmitting && styles.inputDisabled,
-                     ]}
-                     placeholder="Phone Number"
-                     value={formData.phone}
-                     onChangeText={(text) =>
-                       setFormData((prev) => ({ ...prev, phone: text }))
-                     }
-                     keyboardType="phone-pad"
-                     placeholderTextColor="#999"
-                     returnKeyType="done"
-                     editable={!localSubmitting}
-                   />
+                    <TextInput
+                      style={[
+                        styles.input,
+                        localSubmitting && styles.inputDisabled,
+                      ]}
+                      placeholder="Phone Number"
+                      value={formData.phone}
+                      onChangeText={(text) =>
+                        setFormData((prev) => ({ ...prev, phone: text }))
+                      }
+                      keyboardType="phone-pad"
+                      placeholderTextColor="#999"
+                      returnKeyType="done"
+                      editable={!localSubmitting}
+                    />
 
-                   <TouchableOpacity
-                     style={[
-                       styles.submitButton,
-                       localSubmitting && styles.submitButtonDisabled,
-                     ]}
-                     onPress={handleSubmit}
-                     disabled={localSubmitting}
-                   >
-                     {localSubmitting ? (
-                       <ActivityIndicator size="small" color="#fff" />
-                     ) : (
-                       <Text style={styles.submitButtonText}>Add Driver</Text>
-                     )}
-                   </TouchableOpacity>
-                 </ScrollView>
-               </View>
-             </View>
-           </KeyboardAvoidingView>
-         </View>
-       </TouchableWithoutFeedback>
-     </Modal>
-   );
- };
+                    <TouchableOpacity
+                      style={[
+                        styles.submitButton,
+                        localSubmitting && styles.submitButtonDisabled,
+                      ]}
+                      onPress={handleSubmit}
+                      disabled={localSubmitting}
+                    >
+                      {localSubmitting ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.submitButtonText}>Add Driver</Text>
+                      )}
+                    </TouchableOpacity>
+                  </ScrollView>
+                </View>
+              </View>
+            </KeyboardAvoidingView>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+    );
+  };
+
+  const copyToClipboard = async (code) => {
+    try {
+      await Clipboard.setString(code.toString());
+      Alert.alert("Success", "Verification code copied to clipboard!");
+    } catch (error) {
+      console.error("Error copying to clipboard:", error);
+      Alert.alert("Error", "Failed to copy code to clipboard");
+    }
+  };
 
   const VerificationCodeModal = () => (
     <Modal
@@ -471,9 +492,14 @@ export default function DriversScreen() {
           ) : (
             <>
               <Text style={styles.driverNameLabel}>{selectedDriver?.name}</Text>
-              <View style={styles.codeContainer}>
+              <TouchableOpacity
+                style={styles.codeContainer}
+                onPress={() => copyToClipboard(verificationCode)}
+                activeOpacity={0.7}
+              >
                 <Text style={styles.verificationCode}>{verificationCode}</Text>
-              </View>
+                <Text style={styles.tapToCopy}>Tap to copy</Text>
+              </TouchableOpacity>
               <Text style={styles.codeInstructions}>
                 Share this code with your driver to complete their registration
               </Text>
@@ -537,6 +563,21 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#fff",
+  },
+  tapToCopy: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 8,
+  },
+  codeContainer: {
+    backgroundColor: "#f8f9fa",
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 16,
+    width: "100%",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e9ecef",
   },
   container: {
     flex: 1,
@@ -753,14 +794,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     marginBottom: 20,
-  },
-  codeContainer: {
-    backgroundColor: "#f8f9fa",
-    borderRadius: 12,
-    padding: 16,
-    marginVertical: 16,
-    width: "100%",
-    alignItems: "center",
   },
   verificationCode: {
     fontSize: 24,

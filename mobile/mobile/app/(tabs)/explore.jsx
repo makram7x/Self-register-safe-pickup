@@ -37,55 +37,82 @@ export default function NotificationsScreen() {
   // Initialize Socket.IO connection
   useEffect(() => {
     // Create Socket.IO connection
-    socketRef.current = io(
-      "https://self-register-safe-pickup-production.up.railway.app",
-      {
-        transports: ["websocket"],
-        autoConnect: true,
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-      }
-    );
+    socketRef.current = io("http://192.168.100.3:5000", {
+      transports: ["websocket"],
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
 
-    // Handle new notifications
+    // Handle socket connection events
+    socketRef.current.on("connect", () => {
+      console.log("Socket connected");
+      fetchNotifications(); // Refresh notifications on reconnection
+    });
+
+    socketRef.current.on("connect_error", (error) => {
+      console.error("Socket connection error:", error);
+    });
+
+    // Handle new notifications with proper state updates
     socketRef.current.on("newNotification", (notification) => {
-      setNotifications((prev) => [notification, ...prev]);
+      console.log("New notification received:", notification);
+      setNotifications((prevNotifications) => {
+        // Check if notification already exists
+        const exists = prevNotifications.some(
+          (n) => n._id === notification._id
+        );
+        if (!exists) {
+          // Add unread flag
+          const newNotification = { ...notification, read: false };
+          return [newNotification, ...prevNotifications];
+        }
+        return prevNotifications;
+      });
+
       setUnreadCount((prev) => prev + 1);
     });
 
-    // Handle app state changes for reconnection
+    // Handle app state changes
     const subscription = AppState.addEventListener("change", (nextAppState) => {
       if (
         appState.current.match(/inactive|background/) &&
         nextAppState === "active"
       ) {
-        // App has come to foreground
-        if (!socketRef.current.connected) {
+        console.log("App came to foreground - reconnecting socket");
+        if (socketRef.current && !socketRef.current.connected) {
           socketRef.current.connect();
-          fetchNotifications(); // Refresh notifications
+          fetchNotifications();
         }
       }
       appState.current = nextAppState;
     });
 
-    // Clean up
+    // Clean up function
     return () => {
+      console.log("Cleaning up socket connection");
       subscription.remove();
       if (socketRef.current) {
         socketRef.current.disconnect();
+        socketRef.current.off("newNotification");
+        socketRef.current.off("connect");
+        socketRef.current.off("connect_error");
       }
     };
-  }, []);
+  }, []); // Empty dependency array since we want this to run once
 
+  // Update fetchNotifications to handle errors better
   const fetchNotifications = useCallback(async () => {
     try {
       const response = await fetch(
-        "https://self-register-safe-pickup-production.up.railway.app/api/notifications"
+        "http://192.168.100.3:5000/api/notifications"
       );
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
+
       const data = await response.json();
       const readNotifications = await AsyncStorage.getItem("readNotifications");
       const readSet = new Set(JSON.parse(readNotifications) || []);
@@ -95,10 +122,11 @@ export default function NotificationsScreen() {
         read: readSet.has(notification._id),
       }));
 
+      console.log("Fetched notifications:", updatedData);
       setNotifications(updatedData);
       setUnreadCount(updatedData.filter((n) => !n.read).length);
     } catch (error) {
-      console.error("Error fetching notifications:", error.message);
+      console.error("Error fetching notifications:", error);
     }
   }, []);
 
@@ -166,12 +194,16 @@ export default function NotificationsScreen() {
         }
       }}
     >
-      <View style={styles.iconContainer}>{getIcon(item.icon)}</View>
+      <View style={styles.iconContainer}>
+        {React.cloneElement(getIcon(item.icon), {
+          style: [styles.icon, item.read && styles.readIcon],
+        })}
+      </View>
       <View style={styles.contentContainer}>
         <Text style={[styles.title, item.read && styles.readText]}>
           {item.title}
         </Text>
-        <Text style={[styles.time, item.read && styles.readText]}>
+        <Text style={[styles.time, item.read && styles.readTime]}>
           {formatDate(item.createdAt)}
         </Text>
       </View>
@@ -258,30 +290,11 @@ const styles = StyleSheet.create({
   listContentContainer: {
     paddingTop: 16,
   },
-  notificationContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
   iconContainer: {
     marginRight: 16,
   },
-  icon: {
-    width: 24,
-    height: 24,
-    color: "#000",
-  },
   contentContainer: {
     flex: 1,
-  },
-  title: {
-    fontSize: 16,
-    color: "#000",
-  },
-  time: {
-    fontSize: 14,
-    color: "#888",
   },
   modalContainer: {
     flex: 1,
@@ -317,5 +330,48 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  notificationContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#ffffff", // Default background color
+  },
+
+  readNotification: {
+    backgroundColor: "#f5f5f5", // Light gray background for read notifications
+    opacity: 0.8, // Slightly reduce opacity
+  },
+
+  title: {
+    fontSize: 16,
+    color: "#000",
+    fontWeight: "500",
+  },
+
+  readText: {
+    color: "#666", // Darker gray for read notification text
+    fontWeight: "400", // Slightly lighter font weight
+  },
+
+  time: {
+    fontSize: 14,
+    color: "#888",
+  },
+
+  readTime: {
+    color: "#999", // Lighter gray for read notification time
+  },
+
+  icon: {
+    width: 24,
+    height: 24,
+    color: "#000",
+  },
+
+  readIcon: {
+    color: "#666", // Grayed out icon for read notifications
+    opacity: 0.8,
   },
 });

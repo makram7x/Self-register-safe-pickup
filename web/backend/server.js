@@ -19,28 +19,60 @@ const allowedOrigins = [
   process.env.FRONTEND_URL || "*",
 ];
 
-// Initialize Socket.IO with CORS
+// Update the Socket.IO initialization in server.js
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"],
   },
+  transports: ["websocket", "polling"],
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  connectTimeout: 45000,
+  // Add retry logic
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
 });
 
-// Socket.IO connection handling
+// Store the io instance globally
+app.set("io", io);
+
+// Enhanced socket connection handling
 io.on("connection", (socket) => {
-  console.log("Client connected:", socket.id);
+  console.log("New client connected:", socket.id);
 
-  socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
+  // Handle pickup room subscriptions
+  socket.on("subscribe-to-pickups", () => {
+    socket.join("pickups-room");
+    console.log(`Client ${socket.id} subscribed to pickups`);
   });
 
-  // Add error handling for socket connections
+  socket.on("unsubscribe-from-pickups", () => {
+    socket.leave("pickups-room");
+    console.log(`Client ${socket.id} unsubscribed from pickups`);
+  });
+
+  // Handle individual pickup room subscriptions
+  socket.on("join-pickup", (pickupId) => {
+    socket.join(`pickup:${pickupId}`);
+    console.log(`Client ${socket.id} joined pickup room: ${pickupId}`);
+  });
+
+  // Enhanced error handling
   socket.on("error", (error) => {
-    console.error("Socket error:", error);
+    console.error("Socket error for client", socket.id, ":", error);
   });
+
+  socket.on("disconnect", (reason) => {
+    console.log(`Client ${socket.id} disconnected. Reason: ${reason}`);
+  });
+});
+
+// Enhanced error handling for socket.io server
+io.engine.on("connection_error", (err) => {
+  console.error("Socket.IO connection error:", err);
 });
 
 // Middleware
@@ -132,7 +164,7 @@ const userRoutes = require("./routes/userRoutes");
 const parentStudentLinkRoutes = require("./routes/parentStudentRoutes");
 const authRoutes = require("./routes/authRoutes");
 const pickupRoutes = require("./routes/pickupRoutes");
-const qrCodeRoutes = require("./routes/qrCodeRoutes");
+const qrCodeRoutes = require("./routes/qrCodeRoutes")(io); // Update this line
 const driverRoutes = require("./routes/driverRoutes");
 
 // Routes with Socket.IO integration

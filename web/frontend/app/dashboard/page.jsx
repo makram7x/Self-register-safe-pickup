@@ -66,9 +66,7 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchLatestStudents = async () => {
       try {
-        const response = await axios.get(
-          "https://self-register-safe-pickup-production.up.railway.app/api/students"
-        );
+        const response = await axios.get("http://localhost:5000/api/students");
         // Get the last 3 students
         setLatestStudents(response.data);
       } catch (error) {
@@ -83,7 +81,7 @@ export default function Dashboard() {
     const fetchLatestAnnouncements = async () => {
       try {
         const response = await axios.get(
-          "https://self-register-safe-pickup-production.up.railway.app/api/notifications"
+          "http://localhost:5000/api/notifications"
         );
         // Get the last 4 announcements
         setLatestAnnouncements(response.data.slice(-4));
@@ -97,13 +95,10 @@ export default function Dashboard() {
   // Socket initialization and stats update effects
   useEffect(() => {
     console.log("Initializing socket connection...");
-    const newSocket = io(
-      "https://self-register-safe-pickup-production.up.railway.app",
-      {
-        transports: ["websocket"],
-        upgrade: false,
-      }
-    );
+    const newSocket = io("http://localhost:5000", {
+      transports: ["websocket"],
+      upgrade: false,
+    });
 
     newSocket.on("connect", () => {
       console.log("Socket connected:", newSocket.id);
@@ -121,31 +116,6 @@ export default function Dashboard() {
     };
   }, []);
 
-  useEffect(() => {
-    console.log("Initializing socket connection...");
-    const newSocket = io(
-      "https://self-register-safe-pickup-production.up.railway.app",
-      {
-        transports: ["websocket"],
-        upgrade: false,
-      }
-    );
-
-    newSocket.on("connect", () => {
-      console.log("Socket connected:", newSocket.id);
-    });
-
-    newSocket.on("connect_error", (error) => {
-      console.error("Socket connection error:", error);
-    });
-
-    setSocket(newSocket);
-
-    return () => {
-      console.log("Disconnecting socket...");
-      newSocket.disconnect();
-    };
-  }, []);
 
   // Stats update effect
   useEffect(() => {
@@ -153,18 +123,10 @@ export default function Dashboard() {
       try {
         console.log("Fetching initial stats...");
         const [active, delayed, completed, cancelled] = await Promise.all([
-          axios.get(
-            "https://self-register-safe-pickup-production.up.railway.app/api/pickup/active/count"
-          ),
-          axios.get(
-            "https://self-register-safe-pickup-production.up.railway.app/api/pickup/delayed/count"
-          ),
-          axios.get(
-            "https://self-register-safe-pickup-production.up.railway.app/api/pickup/completed/count"
-          ),
-          axios.get(
-            "https://self-register-safe-pickup-production.up.railway.app/api/pickup/cancelled/count"
-          ),
+          axios.get("http://localhost:5000/api/pickup/active/count"),
+          axios.get("http://localhost:5000/api/pickup/delayed/count"),
+          axios.get("http://localhost:5000/api/pickup/completed/count"),
+          axios.get("http://localhost:5000/api/pickup/cancelled/count"),
         ]);
 
         const newStats = {
@@ -254,12 +216,8 @@ export default function Dashboard() {
     const fetchSchoolData = async () => {
       try {
         const [studentRes, parentRes] = await Promise.all([
-          axios.get(
-            "https://self-register-safe-pickup-production.up.railway.app/api/students/count"
-          ),
-          axios.get(
-            "https://self-register-safe-pickup-production.up.railway.app/api/students/parent-count"
-          ),
+          axios.get("http://localhost:5000/api/students/count"),
+          axios.get("http://localhost:5000/api/students/parent-count"),
         ]);
 
         setStudentCount(studentRes.data.count);
@@ -276,7 +234,7 @@ export default function Dashboard() {
     const fetchAnnouncementCount = async () => {
       try {
         const response = await axios.get(
-          "https://self-register-safe-pickup-production.up.railway.app/api/notifications"
+          "http://localhost:5000/api/notifications"
         );
         setAnnouncementCount(response.data.length);
       } catch (error) {
@@ -344,9 +302,7 @@ export default function Dashboard() {
   // Fetch initial pending pickups
   const fetchPendingPickups = async () => {
     try {
-      const response = await axios.get(
-        "https://self-register-safe-pickup-production.up.railway.app/api/pickup/logs"
-      );
+      const response = await axios.get("http://localhost:5000/api/pickup/logs");
       if (response.data.success) {
         const pending = response.data.data.filter(
           (pickup) => pickup.status === "pending"
@@ -403,7 +359,7 @@ export default function Dashboard() {
     try {
       setIsProcessing(true);
       const response = await axios.put(
-        `https://self-register-safe-pickup-production.up.railway.app/api/pickup/${selectedPickup.id}/status`,
+        `http://localhost:5000/api/pickup/${selectedPickup.id}/status`,
         {
           status: actionType,
           updatedBy: "admin", // You might want to pass actual admin ID here
@@ -470,7 +426,7 @@ export default function Dashboard() {
     const fetchStudentCount = async () => {
       try {
         const response = await axios.get(
-          "https://self-register-safe-pickup-production.up.railway.app/api/students/count"
+          "http://localhost:5000/api/students/count"
         );
         setStudentCount(response.data.count);
       } catch (error) {
@@ -485,7 +441,7 @@ export default function Dashboard() {
     const fetchParentCount = async () => {
       try {
         const response = await axios.get(
-          "https://self-register-safe-pickup-production.up.railway.app/api/students/parent-count"
+          "http://localhost:5000/api/students/parent-count"
         );
         setParentCount(response.data.count);
       } catch (error) {

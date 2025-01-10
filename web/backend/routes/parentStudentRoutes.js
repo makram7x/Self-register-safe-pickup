@@ -7,6 +7,7 @@ const {
   verifyLink,
   debugLinks,
   deleteAllLinks,
+  getLinksByStudentCode,
 } = require("../controller/parentStudentController");
 
 router.delete("/delete-all", deleteAllLinks);
@@ -15,5 +16,6 @@ router.get("/debug/:parentId", debugLinks); // Fixed debug route path
 router.post("/", createLink);
 router.get("/:parentId", getParentLinks);
 router.delete("/:linkId", deleteLink);
+router.get("/by-code/:uniqueCode", getLinksByStudentCode);
 
 module.exports = router;

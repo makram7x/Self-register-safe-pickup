@@ -163,6 +163,39 @@ export default function StudentPage() {
 
     try {
       if (editId) {
+        // Find the student's old data to check if unique code has changed
+        const oldStudent = students.find((s) => s._id === editId);
+        console.log("Old student:", oldStudent);
+        console.log("New unique code:", uniqueCode);
+        console.log("Old unique code:", oldStudent?.uniqueCode);
+
+        if (oldStudent && oldStudent.uniqueCode !== uniqueCode) {
+          console.log("Unique code has changed, deleting all parent links...");
+          try {
+            // First, find all links for this student's unique code
+            const linksResponse = await axios.get(
+              `http://localhost:5000/api/parent-student-links/by-code/${oldStudent.uniqueCode}`
+            );
+
+            if (linksResponse.data.success && linksResponse.data.links) {
+              // Delete each link
+              for (const link of linksResponse.data.links) {
+                await axios.delete(
+                  `http://localhost:5000/api/parent-student-links/${link._id}`
+                );
+              }
+              console.log("Successfully deleted all parent links");
+            }
+          } catch (err) {
+            console.error("Error managing parent-student links:", err);
+            message.error(
+              "Error updating parent connections. Please try again."
+            );
+            return;
+          }
+        }
+
+        // Proceed with updating student information
         const response = await axios.put(
           `http://localhost:5000/api/students/${editId}`,
           {
@@ -177,48 +210,76 @@ export default function StudentPage() {
 
         if (response.status === 200) {
           console.log("Student updated successfully");
-        } else {
-          console.error("Failed to update student");
-        }
-      } else {
-        const response = await axios.post(
-          "http://localhost:5000/api/students",
-          {
-            studentName,
-            parentName,
-            grade,
-            parentPhone,
-            parentEmail,
-            uniqueCode,
+          message.success("Student updated successfully");
+          if (oldStudent && oldStudent.uniqueCode !== uniqueCode) {
+            message.info(
+              "Parent connections have been reset due to code change"
+            );
           }
-        );
-
-        if (response.status === 201) {
-          console.log("Student created successfully");
         } else {
           console.error("Failed to create student");
+          message.error("Failed to create student");
+          throw new Error("Failed to update student");
         }
       }
       closeModal();
       fetchStudents();
     } catch (error) {
       console.error("Error:", error);
+      message.error(
+        "Error: " + (error.response?.data?.message || error.message)
+      );
     }
   };
 
   const handleDelete = async (id) => {
     try {
+      // First, get the student's information to access their unique code
+      const student = students.find((s) => s._id === id);
+      if (!student) {
+        throw new Error("Student not found");
+      }
+
+      // First delete all parent-student links associated with this student's unique code
+      try {
+        const linksResponse = await axios.get(
+          `http://localhost:5000/api/parent-student-links/by-code/${student.uniqueCode}`
+        );
+
+        if (linksResponse.data.success && linksResponse.data.links) {
+          // Delete each link
+          for (const link of linksResponse.data.links) {
+            await axios.delete(
+              `http://localhost:5000/api/parent-student-links/${link._id}`
+            );
+          }
+          console.log("Successfully deleted all parent links");
+        }
+      } catch (err) {
+        console.error("Error deleting parent-student links:", err);
+        message.error("Error removing parent connections. Please try again.");
+        return;
+      }
+
+      // Then proceed with deleting the student
       const response = await axios.delete(
         `http://localhost:5000/api/students/${id}`
       );
+
       if (response.status === 200) {
-        console.log("Student deleted successfully");
+        console.log("Student and associated links deleted successfully");
+        message.success(
+          "Student and all associated connections deleted successfully"
+        );
         fetchStudents();
       } else {
-        console.error("Failed to delete student");
+        throw new Error("Failed to delete student");
       }
     } catch (error) {
       console.error("Error deleting student:", error);
+      message.error(
+        "Error: " + (error.response?.data?.message || error.message)
+      );
     }
   };
 
