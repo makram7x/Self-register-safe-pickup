@@ -33,33 +33,32 @@ jest.mock("@radix-ui/react-dropdown-menu", () => ({
 
 // Mock lucide-react icons
 jest.mock("lucide-react", () => ({
-  ChevronDownIcon: () => <span data-testid="chevron-down-icon">▼</span>,
-  SearchIcon: () => <span data-testid="search-icon">🔍</span>,
-  Bell: () => <span data-testid="bell-icon">🔔</span>,
-  Calendar: () => <span data-testid="calendar-icon">📅</span>,
-  CheckIcon: () => <span data-testid="check-icon">✓</span>,
-  XIcon: () => <span data-testid="x-icon">✕</span>,
-  DeleteIcon: () => <span data-testid="delete-icon">🗑</span>,
   UsersIcon: () => <span data-testid="users-icon">👥</span>,
   ClockIcon: () => <span data-testid="clock-icon">⏰</span>,
   MegaphoneIcon: () => <span data-testid="megaphone-icon">📢</span>,
+  DeleteIcon: () => <span data-testid="delete-icon">🗑</span>,
+  Bell: () => <span data-testid="bell-icon">🔔</span>,
   TrendingUp: () => <span data-testid="trending-up-icon">📈</span>,
+  Calendar: () => <span data-testid="calendar-icon">📅</span>,
+  AlertTriangle: () => <span data-testid="alert-triangle-icon">⚠️</span>,
+  Cloud: () => <span data-testid="cloud-icon">☁️</span>,
+  X: () => <span data-testid="x-icon">✕</span>,
+  XIcon: () => <span data-testid="x-icon">✕</span>,
+  QrCode: () => <span data-testid="qr-code-icon">🔳</span>,
+  Activity: () => <span data-testid="activity-icon">📊</span>,
+  Trash2: () => <span data-testid="trash2-icon">🗑️</span>,
+  Badge: () => <span data-testid="badge-icon">🔖</span>,
 }));
 
 // Mock socket.io-client
-jest.mock("socket.io-client", () => {
-  const mockSocket = {
+jest.mock("socket.io-client", () => ({
+  __esModule: true,
+  default: jest.fn().mockReturnValue({
     on: jest.fn(),
     off: jest.fn(),
-    emit: jest.fn(),
     disconnect: jest.fn(),
-  };
-  return {
-    io: jest.fn(() => mockSocket),
-    connect: jest.fn(() => mockSocket),
-    default: jest.fn(() => mockSocket),
-  };
-});
+  }),
+}));
 
 // Mock antd components
 jest.mock("antd", () => ({

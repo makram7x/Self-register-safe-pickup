@@ -1,9 +1,15 @@
 const User = require("../models/userSchema");
 
+// userController.js
 exports.createUser = async (req, res) => {
   try {
     console.log("Request body:", req.body);
     const { googleId, name, email, profilePicture } = req.body;
+
+    // Add validation
+    if (!googleId || !name || !email) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
 
     let user = await User.findOne({ googleId });
 

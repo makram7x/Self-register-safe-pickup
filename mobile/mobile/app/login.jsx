@@ -506,7 +506,6 @@ export default function LoginScreen() {
           <StatusBar style="auto" />
 
           <View style={styles.container}>
-            // add an image here
             <Image
               source={require("../assets/images/logo-grey.png")}
               style={{ width: 250, height: 170, marginBottom: 40 }}
